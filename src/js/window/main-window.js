@@ -6941,6 +6941,23 @@ ipcRenderer.on('exportPDF', (event, args) => {
   ipcRenderer.send('analyticsEvent', 'Board', 'exportPDF')
 })
 
+// Enhanced Export Integration
+const { initializeExportIntegration } = require('../integration/export-integration')
+let exportIntegration = null
+
+ipcRenderer.on('exportEnhancedPDF', (event, args) => {
+  try {
+    if (!exportIntegration) {
+      exportIntegration = initializeExportIntegration(boardData, boardFilename)
+    }
+    exportIntegration.showEnhancedExportDialog()
+    ipcRenderer.send('analyticsEvent', 'Board', 'exportEnhancedPDF')
+  } catch (error) {
+    console.error('Failed to show enhanced export dialog:', error)
+    // Fallback to regular export
+    openPrintWindow(PDFEXPORTPW, showPDFPrintWindow);
+  }
+})
 
 ipcRenderer.on('printWorksheet', (event, args) => {
   log.info(boardData)
