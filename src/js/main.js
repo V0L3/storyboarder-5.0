@@ -1430,6 +1430,10 @@ ipcMain.on('exportPDF', (event, arg) => {
   mainWindow.webContents.send('exportPDF', arg)
 })
 
+ipcMain.on('exportEnhancedPDF', (event, arg) => {
+  mainWindow.webContents.send('exportEnhancedPDF', arg)
+})
+
 ipcMain.on('exportWeb', (event, arg) => {
   mainWindow.webContents.send('exportWeb', arg)
 })
