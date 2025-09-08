@@ -157,7 +157,14 @@ AppMenu.File = (i18n) => ({
       label: i18n.t('menu.file.print-pdf'),
       accelerator: keystrokeFor('menu:file:print'),
       click (item, focusedWindow, event) {
-        ipcRenderer.send('exportPDF')
+        ipcRenderer.send('exportEnhancedPDF')
+      }
+    },
+    {
+      label: 'Enhanced Export...',
+      accelerator: 'CmdOrCtrl+Shift+E',
+      click (item, focusedWindow, event) {
+        ipcRenderer.send('exportEnhancedPDF')
       }
     },
     {
