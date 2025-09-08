@@ -1,0 +1,395 @@
+/* GIF Grouping Styles */
+
+/* Grouping Mode Styles */
+.gif-grouping-mode {
+  cursor: crosshair;
+}
+
+.gif-grouping-mode .thumbnail {
+  cursor: pointer;
+  position: relative;
+  border: 2px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.gif-grouping-mode .thumbnail:hover {
+  border-color: #4CAF50;
+  transform: scale(1.05);
+}
+
+.thumbnail.gif-selected {
+  border-color: #4CAF50 !important;
+  box-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+}
+
+.gif-selection-indicator {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  background: #4CAF50;
+  color: white;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  z-index: 10;
+}
+
+/* Group Indicators in Timeline */
+.thumbnail.gif-grouped {
+  position: relative;
+}
+
+.gif-group-indicator {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: white;
+  z-index: 10;
+  border: 2px solid white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+/* Grouping Instructions */
+.gif-grouping-instructions {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 15px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+}
+
+.instructions-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.instructions-content span {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+/* GIF Group Panel */
+.gif-group-panel {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  margin: 10px 0;
+  overflow: hidden;
+}
+
+.gif-group-header {
+  background: #e9ecef;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.gif-group-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #495057;
+}
+
+.btn-toggle {
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: #6c757d;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.gif-group-content {
+  padding: 16px;
+}
+
+.group-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.btn-small {
+  padding: 6px 12px;
+  font-size: 12px;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-small:hover {
+  background: #f8f9fa;
+  border-color: #adb5bd;
+}
+
+/* GIF Groups List */
+.gif-groups-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.gif-group-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  background: white;
+  transition: all 0.2s ease;
+}
+
+.gif-group-item:hover {
+  border-color: #adb5bd;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.group-info {
+  flex: 1;
+}
+
+.group-name {
+  font-weight: 500;
+  font-size: 14px;
+  color: #495057;
+  padding-left: 8px;
+  margin-bottom: 4px;
+}
+
+.group-stats {
+  font-size: 12px;
+  color: #6c757d;
+  padding-left: 11px;
+}
+
+.group-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.group-actions button {
+  background: none;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.group-actions button:hover {
+  background: #f8f9fa;
+}
+
+.btn-preview:hover { background: #e3f2fd; }
+.btn-export:hover { background: #e8f5e8; }
+.btn-edit:hover { background: #fff3e0; }
+.btn-delete:hover { background: #ffebee; }
+
+/* Modal Styles for GIF Operations */
+.gif-preview-modal {
+  max-width: 800px;
+  width: 90vw;
+}
+
+.gif-preview-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.preview-boards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}
+
+.preview-board {
+  text-align: center;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  padding: 8px;
+  background: #f8f9fa;
+}
+
+.preview-board img {
+  width: 80px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.board-number {
+  font-size: 10px;
+  color: #6c757d;
+  margin-top: 4px;
+}
+
+.preview-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 6px;
+}
+
+.preview-settings label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.preview-settings input[type="range"] {
+  flex: 1;
+}
+
+.preview-settings select {
+  padding: 4px 8px;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+}
+
+/* Board Selector in Dialogs */
+.board-selector {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  padding: 12px;
+  background: #f8f9fa;
+}
+
+.board-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid #e9ecef;
+  cursor: pointer;
+}
+
+.board-option:last-child {
+  border-bottom: none;
+}
+
+.board-option:hover {
+  background: rgba(0,0,0,0.05);
+}
+
+.board-option input[type="checkbox"] {
+  margin: 0;
+}
+
+.board-option span {
+  font-weight: 500;
+  color: #495057;
+}
+
+.board-option small {
+  color: #6c757d;
+  font-style: italic;
+  margin-left: auto;
+}
+
+/* Toolbar Button for GIF Grouping */
+#gif-group-btn {
+  position: relative;
+  margin-left: 10px;
+}
+
+#gif-group-btn.active {
+  background: #4CAF50;
+  color: white;
+}
+
+#gif-group-btn.active::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  background: #FF5722;
+  border-radius: 50%;
+  border: 2px solid white;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .gif-grouping-instructions .instructions-content {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .gif-preview-modal {
+    width: 95vw;
+  }
+  
+  .preview-boards {
+    justify-content: flex-start;
+  }
+  
+  .preview-board img {
+    width: 60px;
+    height: 45px;
+  }
+  
+  .group-actions {
+    flex-direction: column;
+  }
+}
+
+/* Animation for Group Indicators */
+.gif-group-indicator {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+/* Selection Animation */
+.thumbnail.gif-selected .gif-selection-indicator {
+  animation: bounce 0.5s ease;
+}
+
+@keyframes bounce {
+  0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-5px); }
+  60% { transform: translateY(-3px); }
+}
