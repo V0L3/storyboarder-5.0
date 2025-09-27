@@ -570,7 +570,31 @@ let openFile = filepath => {
         }
 
         currentFile = filepath
-        currentPath = path.join(path.dirname(currentFile), 'storyboards')
+        {
+          const projectDir = path.dirname(currentFile)
+          const base = path.basename(currentFile, path.extname(currentFile))
+          const defaultPath = path.join(projectDir, 'storyboards')
+          const uniquePath = path.join(projectDir, `${base}.storyboards`)
+          let usePath = uniquePath
+          if (fs.existsSync(uniquePath)) {
+            usePath = uniquePath
+          } else if (fs.existsSync(defaultPath)) {
+            try {
+              const settingsPath = path.join(defaultPath, 'storyboard.settings')
+              if (fs.existsSync(settingsPath)) {
+                const settings = JSON.parse(fs.readFileSync(settingsPath))
+                if (!settings.scriptFile || path.normalize(settings.scriptFile) === path.normalize(currentFile)) {
+                  usePath = defaultPath
+                }
+              } else {
+                usePath = defaultPath
+              }
+            } catch (e) {
+              usePath = defaultPath
+            }
+          }
+          currentPath = usePath
+        }
 
         try {
           let [scriptData, locations, characters, metadata] = processFdxData(fdxObj)
@@ -593,7 +617,31 @@ let openFile = filepath => {
 
   } else if (extname == '.fountain') {
     currentFile = filepath
-    currentPath = path.join(path.dirname(currentFile), 'storyboards')
+    {
+      const projectDir = path.dirname(currentFile)
+      const base = path.basename(currentFile, path.extname(currentFile))
+      const defaultPath = path.join(projectDir, 'storyboards')
+      const uniquePath = path.join(projectDir, `${base}.storyboards`)
+      let usePath = uniquePath
+      if (fs.existsSync(uniquePath)) {
+        usePath = uniquePath
+      } else if (fs.existsSync(defaultPath)) {
+        try {
+          const settingsPath = path.join(defaultPath, 'storyboard.settings')
+          if (fs.existsSync(settingsPath)) {
+            const settings = JSON.parse(fs.readFileSync(settingsPath))
+            if (!settings.scriptFile || path.normalize(settings.scriptFile) === path.normalize(currentFile)) {
+              usePath = defaultPath
+            }
+          } else {
+            usePath = defaultPath
+          }
+        } catch (e) {
+          usePath = defaultPath
+        }
+      }
+      currentPath = usePath
+    }
 
     fs.readFile(filepath, 'utf-8', (err, data) => {
       if (err) {
@@ -626,6 +674,12 @@ const findOrCreateProjectFolder = (scriptDataObject) => {
     let boardSettings = JSON.parse(fs.readFileSync(path.join(currentPath, 'storyboard.settings')))
     if (!boardSettings.lastScene) {
       boardSettings.lastScene = 0
+    }
+
+    // backfill scriptFile for legacy projects
+    if (!boardSettings.scriptFile) {
+      boardSettings.scriptFile = currentFile
+      try { fs.writeFileSync(path.join(currentPath, 'storyboard.settings'), JSON.stringify(boardSettings)) } catch (e) {}
     }
 
     switch (path.extname(currentFile)) {
@@ -1046,7 +1100,8 @@ const createAndLoadProject = aspectRatio => {
 
   let boardSettings = {
     lastScene: 0,
-    aspectRatio
+    aspectRatio,
+    scriptFile: currentFile
   }
   fs.writeFileSync(path.join(currentPath, 'storyboard.settings'), JSON.stringify(boardSettings))
 
