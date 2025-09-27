@@ -512,6 +512,8 @@ class EnhancedGifGroupManager {
 
     // Sync with current selections instead of clearing
     this.syncWithMainSelections()
+    // Apply initial highlight on mode start
+    this.highlightSelectedBoardGroup()
 
     // Set up periodic sync with main selections (optimized frequency)
     this.selectionSyncInterval = setInterval(() => {
@@ -519,9 +521,17 @@ class EnhancedGifGroupManager {
     }, 1500) // Sync every 1.5 seconds for even better performance
 
     // Listen for board selection changes to fix glitches
-    document.addEventListener('boardSelectionChanged', () => {
-      this.onBoardSelectionChanged()
-    })
+    const selectionHandler = () => {
+      try {
+        this.onBoardSelectionChanged()
+        this.highlightSelectedBoardGroup()
+      } catch (e) {
+        // ignore to avoid breaking project load
+      }
+    }
+    // Save to remove later when stopping mode
+    this._selectionHandler = selectionHandler
+    document.addEventListener('boardSelectionChanged', selectionHandler)
 
     // Show notification
     this.showNotification('GIF Grouping Mode Active - Select 2+ boards to create groups', 'info')
@@ -555,6 +565,12 @@ class EnhancedGifGroupManager {
     // Clear selection
     this.selectedBoards.clear()
     this.updateTimelineDisplay()
+
+    // Remove listener to avoid stale highlights
+    if (this._selectionHandler) {
+      document.removeEventListener('boardSelectionChanged', this._selectionHandler)
+      this._selectionHandler = null
+    }
   }
 
   hideGroupingUI() {
@@ -1107,6 +1123,9 @@ class EnhancedGifGroupManager {
         ${addButtonHtml}
       `
     }
+
+    // After rendering, apply highlight to the group that contains the selected board
+    this.highlightSelectedBoardGroup()
     
     // Add event listeners for group actions
     container.querySelectorAll('.group-action-btn').forEach(btn => {
@@ -1131,6 +1150,24 @@ class EnhancedGifGroupManager {
     const addGroupBtn = container.querySelector('#add-group-btn') || container.parentElement?.querySelector('#add-group-btn')
     if (addGroupBtn) {
       addGroupBtn.addEventListener('click', () => this.createGroupFromSelection())
+    }
+    
+    // Click on a group item selects the group (ignore action/timing controls). Rebind safely on each render
+    const scrollAreaEl = container.querySelector('#groups-scroll') || container
+    if (scrollAreaEl) {
+      if (this._groupListClickHandler) {
+        scrollAreaEl.removeEventListener('click', this._groupListClickHandler)
+      }
+      this._groupListClickHandler = (e) => {
+        const actionBtn = e.target.closest('.group-action-btn')
+        const timingControls = e.target.closest('.group-timing-controls')
+        if (actionBtn || timingControls) return
+        const item = e.target.closest('.group-item')
+        if (item && item.dataset.groupId) {
+          this.selectGroup(item.dataset.groupId)
+        }
+      }
+      scrollAreaEl.addEventListener('click', this._groupListClickHandler)
     }
     
     // Add event listeners for timing controls
@@ -1244,6 +1281,64 @@ class EnhancedGifGroupManager {
       
       console.log('[Slider] Event listeners added to slider')
     })
+  }
+
+  // Highlight the group item that contains the currently selected board
+  highlightSelectedBoardGroup() {
+    try {
+      let selectedIndex = null
+      if (typeof window !== 'undefined') {
+        // Prefer the first selected board (if any), else fall back to currentBoard
+        if (window.selections && window.selections.size > 0) {
+          selectedIndex = Array.from(window.selections)[0]
+        } else if (typeof window.currentBoard === 'number') {
+          selectedIndex = window.currentBoard
+        }
+      }
+      if (selectedIndex === null) return
+
+      // Find the group that contains this board
+      const groups = this.videoGroupManager.getAllGroups()
+      let activeGroupId = null
+      for (const group of groups) {
+        if (group.boardIds && group.boardIds.includes(selectedIndex)) {
+          activeGroupId = group.id
+          break
+        }
+      }
+
+      // Clear previous highlights
+      const items = document.querySelectorAll('#groups-list .group-item')
+      items.forEach(el => {
+        el.classList.remove('active')
+        el.style.outline = ''
+        el.style.boxShadow = ''
+        el.style.borderColor = '#3a3a3c'
+        el.style.background = '#1c1c1e'
+      })
+
+      if (activeGroupId) {
+        const el = document.querySelector(`#groups-list .group-item[data-group-id="${activeGroupId}"]`)
+        if (el) {
+          // Apply a subtle highlight
+          el.classList.add('active')
+          el.style.borderColor = '#8ab4ff'
+          el.style.background = '#2c2c2e'
+          el.style.boxShadow = '0 0 0 1px rgba(138,180,255,0.6), 0 2px 8px rgba(0,0,0,0.35)'
+          // Ensure it is visible
+          const scroll = document.getElementById('groups-scroll')
+          if (scroll) {
+            const rect = el.getBoundingClientRect()
+            const scrollRect = scroll.getBoundingClientRect()
+            if (rect.top < scrollRect.top || rect.bottom > scrollRect.bottom) {
+              el.scrollIntoView({ block: 'nearest' })
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
   }
 
   updateTimelineDisplay() {
@@ -1477,6 +1572,8 @@ class EnhancedGifGroupManager {
       if (selectionsChanged) {
         this.updateSelectionDisplay()
         this.updateTimelineDisplay()
+        // Ensure highlight updates instantly without reopening
+        this.highlightSelectedBoardGroup()
       }
     }
   }

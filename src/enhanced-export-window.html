@@ -297,6 +297,8 @@
       color: #ffffff;
     }
     
+    :root { --mid-col-width: auto; }
+
     .form-group input,
     .form-group select {
       width: 100%;
@@ -307,6 +309,14 @@
       background: #3a3a3c;
       color: #ffffff;
     }
+    /* Constrain specific inputs for consistent alignment */
+    #filename-template { max-width: 360px; }
+    #author-name { max-width: 360px; }
+    #layout-template { max-width: 360px; }
+    /* Columns/Spacing should match Paper Size width dynamically */
+    #columns { width: var(--mid-col-width); max-width: 100%; }
+    /* Spacing matches Paper Size width dynamically */
+    #spacing { width: var(--mid-col-width); max-width: 100%; }
     
     .form-group input:focus,
     .form-group select:focus {
@@ -315,14 +325,16 @@
       box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
     }
     
+    /* Use grid so inputs in the same row align to the same columns across rows */
     .form-row {
-      display: flex;
-      gap: 16px;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      column-gap: 16px;
+      row-gap: 0;
+      align-items: end;
     }
     
-    .form-row .form-group {
-      flex: 1;
-    }
+    .form-row .form-group { width: 100%; }
     
     .btn {
       padding: 8px 16px;
@@ -654,6 +666,14 @@
                 Include Custom Fields
               </label>
             </div>
+
+          <div class="form-group">
+            <label for="dialogue-in-quotes" class="checkbox-label">
+              <input type="checkbox" id="dialogue-in-quotes">
+              Put dialogue in quotations
+            </label>
+            <div class="form-description">Wrap dialogue in quotes, preserving speakers (e.g., Jack: "Hello").</div>
+          </div>
 
             <div class="form-group">
               <label for="include-custom-layers" class="checkbox-label">
@@ -1097,6 +1117,25 @@
     })
 
     // Tab switching
+    // Sync dynamic widths so Columns/Spacing match Paper Size automatically
+    function syncMidColumnWidth() {
+      try {
+        const paper = document.getElementById('paper-size')
+        const columns = document.getElementById('columns')
+        const spacing = document.getElementById('spacing')
+        if (paper && columns && spacing) {
+          // clientWidth = content + padding (no border). Our inputs share the same
+          // padding (12px left/right) and 1px borders. Set content width so that
+          // outer width (content + padding + border) matches the Paper Size outer width.
+          const client = paper.clientWidth
+          const contentWidth = Math.max(0, client - 24) // subtract our horizontal padding (12*2)
+          document.documentElement.style.setProperty('--mid-col-width', contentWidth + 'px')
+        }
+      } catch(e) { /* ignore */ }
+    }
+    window.addEventListener('resize', syncMidColumnWidth)
+    setTimeout(syncMidColumnWidth, 0)
+
     document.querySelectorAll('.tab-button').forEach(button => {
       button.addEventListener('click', (e) => {
         // Remove active class from all tabs and buttons
@@ -1107,6 +1146,7 @@
         e.target.classList.add('active')
         const tabId = e.target.dataset.tab + '-tab'
         document.getElementById(tabId).classList.add('active')
+        syncMidColumnWidth()
       })
     })
 
@@ -1218,6 +1258,7 @@
            resolution: document.getElementById('gif-resolution').value,
            includeDialogue: document.getElementById('include-dialogue-in-gifs').checked
          },
+         putDialogueInQuotes: document.getElementById('dialogue-in-quotes').checked,
          exportFormat: document.getElementById('export-format').value,
          imageQuality: document.getElementById('output-quality').value,
          pdfQuality: document.getElementById('pdf-quality').value,
@@ -1305,6 +1346,7 @@
            resolution: document.getElementById('gif-resolution').value,
            includeDialogue: document.getElementById('include-dialogue-in-gifs').checked
          },
+         putDialogueInQuotes: document.getElementById('dialogue-in-quotes').checked,
          exportFormat: document.getElementById('export-format').value,
          imageQuality: document.getElementById('output-quality').value,
          pdfQuality: document.getElementById('pdf-quality').value,
@@ -2439,8 +2481,29 @@
 
      // Initialize
      document.addEventListener('DOMContentLoaded', () => {
-       // Load saved settings
-       loadSettings()
+    // Load saved settings (localStorage), then merge from app prefs via IPC for persistence
+    loadSettings()
+    try {
+      if (window.require) {
+        const { ipcRenderer } = window.require('electron')
+        const saved = ipcRenderer.sendSync('enhanced-export-settings:get')
+        if (saved && typeof saved === 'object') {
+          // Apply saved settings to form
+          Object.entries(saved).forEach(([key, val]) => {
+            const el = document.getElementById(key)
+            if (!el) return
+            if (el.type === 'checkbox') {
+              el.checked = !!val
+            } else if (typeof val === 'string' || typeof val === 'number') {
+              el.value = val
+            }
+          })
+          // Refresh any computed UI
+          updatePreview()
+          syncMidColumnWidth()
+        }
+      }
+    } catch (e) { /* ignore */ }
        
        // Set up settings persistence
        setupSettingsPersistence()
@@ -2455,8 +2518,35 @@
          imageSizeValue.textContent = imageSizeSlider.value + '%'
        })
        
-       // Initialize preview
-       updatePreview()
+      // Initialize preview
+      updatePreview()
+      // Persist settings to app prefs whenever any control changes
+      const persist = () => {
+        try {
+          if (!window.require) return
+          const { ipcRenderer } = window.require('electron')
+          const keys = [
+            'layout-template','paper-size','paper-orientation','columns','spacing','image-size',
+            'dialogue-below-image','dialogue-font','enable-dotted-lines','enable-note-lines',
+            'filename-template','author-name','show-notes','show-filenames','show-custom-fields',
+            'include-custom-layers','include-gifs','include-dialogue-in-gifs','export-format',
+            'output-quality','pdf-quality','pdf-format','open-folder','export-gif-with-pdf',
+            'respect-groups-in-pdf'
+          ]
+          const settings = {}
+          keys.forEach(id => {
+            const el = document.getElementById(id)
+            if (!el) return
+            settings[id] = (el.type === 'checkbox') ? el.checked : el.value
+          })
+          ipcRenderer.sendSync('enhanced-export-settings:set', settings)
+        } catch (e) { /* ignore */ }
+      }
+      const inputsToPersist = document.querySelectorAll('input, select')
+      inputsToPersist.forEach(el => {
+        el.addEventListener('change', persist)
+        el.addEventListener('input', persist)
+      })
      })
     } catch (error) {
       // Suppress any remaining errors

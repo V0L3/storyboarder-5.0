@@ -10,7 +10,8 @@
   <body>
     <div id="main"></div>
     <script>
-      require('./build/shot-generator.js')
+      // Load the renderer entry directly (the bundled build file is not present)
+      require('./js/windows/shot-generator/window.js')
     </script>
   </body>
 </html>

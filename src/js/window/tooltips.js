@@ -1,7 +1,39 @@
 const { remote } = require('electron')
 let { acceleratorAsHtml } = require('../utils/index')
 const prefsModule = require('electron').remote.require('./prefs')
-const Tooltip = require('tether-tooltip')
+// Robust require for tooltip dependency (handles packaging issues)
+let Tooltip
+try {
+  Tooltip = require('tether-tooltip')
+} catch (e1) {
+  try {
+    // Fallback to bundled vendor build
+    Tooltip = require('../vendor/tether-tooltip')
+  } catch (e2) {
+    // Final no-op fallback to avoid runtime crashes
+    class NoopTooltip {
+      constructor () {
+        this.drop = {
+          on: () => {},
+          close: () => {},
+          remove: () => {},
+          destroy: () => {},
+          open: () => {},
+          toggle: () => {},
+          position: () => {}
+        }
+      }
+      close () {}
+      open () {}
+      toggle () {}
+      remove () {}
+      destroy () {}
+      position () {}
+    }
+    NoopTooltip.autoinit = false
+    Tooltip = NoopTooltip
+  }
+}
 const sfx = require('../wonderunit-sound')
 
 let enableTooltips

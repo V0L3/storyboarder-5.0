@@ -1221,54 +1221,53 @@ class VideoGroupManager {
 
   getShotNumberForBoard(boardIndex) {
     console.log(`[VideoGroupManager.getShotNumberForBoard] Called with boardIndex: ${boardIndex}`)
-    
+
     let rawShotNumber = null
-    
-    // Use the canonical helper from main window to ensure parity with export/UI
-    if (typeof window !== 'undefined' && typeof window.getBoardShotName === 'function') {
-      console.log(`[VideoGroupManager.getShotNumberForBoard] Calling window.getBoardShotName(${boardIndex})`)
-      rawShotNumber = window.getBoardShotName(boardIndex)
-      console.log(`[VideoGroupManager.getShotNumberForBoard] window.getBoardShotName returned: "${rawShotNumber}"`)
-    } else {
-      console.log(`[VideoGroupManager.getShotNumberForBoard] window.getBoardShotName not available`)
+
+    // Try IPC to request canonical board data from main process
+    try {
+      const { ipcRenderer } = require('electron')
+      const board = ipcRenderer.sendSync('get-board-data-for-shot-name', boardIndex)
+      if (board && board.shot) {
+        rawShotNumber = board.shot
+        console.log(`[VideoGroupManager.getShotNumberForBoard] IPC shot: "${rawShotNumber}"`)
+      }
+    } catch (e) {
+      // ignore and fall back
     }
 
-    // Fallback: use export-equivalent logic
+    // Fallback: use window helper if available
+    if (!rawShotNumber && typeof window !== 'undefined' && typeof window.getBoardShotName === 'function') {
+      rawShotNumber = window.getBoardShotName(boardIndex)
+    }
+
+    // Fallback: use local data
     if (!rawShotNumber && this.boardData && this.boardData.boards) {
-      console.log(`[VideoGroupManager.getShotNumberForBoard] Using fallback logic`)
       const boards = this.boardData.boards
       if (boardIndex >= 0 && boardIndex < boards.length) {
         const board = boards[boardIndex]
         const shotNumber = (boardIndex + 1).toString().padStart(2, '0')
         rawShotNumber = board && board.shot ? board.shot : shotNumber
-        console.log(`[VideoGroupManager.getShotNumberForBoard] Fallback result: "${rawShotNumber}"`)
       }
     }
 
     // Final fallback: try UI
     if (!rawShotNumber) {
-      // Find thumbnail by position, not by data-thumbnail attribute
       const thumbnails = document.querySelectorAll('.thumbnail, .t-scene, [data-thumbnail]')
       const thumbnail = thumbnails[boardIndex]
       if (thumbnail) {
-        const shotText = thumbnail.querySelector('.shot-number, .board-number')
+        const shotText = thumbnail.querySelector('.shot-number, .board-number, .shot')
         if (shotText && shotText.textContent) {
           rawShotNumber = shotText.textContent.trim()
-          console.log(`[VideoGroupManager.getShotNumberForBoard] UI fallback result: "${rawShotNumber}"`)
         }
       }
     }
     
-    // Final fallback
     if (!rawShotNumber) {
       rawShotNumber = `Board ${boardIndex + 1}`
-      console.log(`[VideoGroupManager.getShotNumberForBoard] Final fallback result: "${rawShotNumber}"`)
     }
     
-    // Extract base shot number (remove letters like "6A" -> "6")
     const baseShotNumber = this.extractBaseShotNumber(rawShotNumber)
-    console.log(`[VideoGroupManager.getShotNumberForBoard] Extracted base shot number: "${baseShotNumber}" from "${rawShotNumber}"`)
-    
     return baseShotNumber
   }
 

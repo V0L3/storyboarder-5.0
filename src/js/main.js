@@ -1535,6 +1535,25 @@ ipcMain.on('export-pdf-advanced', (event, config) => {
   mainWindow.webContents.send('export-pdf-advanced', config)
 })
 
+// Persist enhanced export dialog settings across app restarts
+ipcMain.on('enhanced-export-settings:get', (event) => {
+  try {
+    const prefsAll = prefModule.getPrefs('enhanced export settings') || {}
+    event.returnValue = prefsAll.enhancedExportSettings || null
+  } catch (e) {
+    event.returnValue = null
+  }
+})
+
+ipcMain.on('enhanced-export-settings:set', (event, settings) => {
+  try {
+    prefModule.set('enhancedExportSettings', settings)
+    event.returnValue = true
+  } catch (e) {
+    event.returnValue = false
+  }
+})
+
 ipcMain.on('close-enhanced-export-window', (event) => {
   // Close the enhanced export window properly
   try {
@@ -1667,6 +1686,32 @@ ipcMain.on('languageAdded', (event, lng) => {
 ipcMain.on('languageRemoved', (event, lng) => {
   languageSettings._loadFile()
   notifyAllsWindows("languageRemoved", lng)
+})
+
+// Handle requests for board shot names from enhanced export window
+ipcMain.on('get-board-data-for-shot-name', (event, boardIndex) => {
+  try {
+    // Ensure we have valid board data and index
+    if (!global.boardData || !global.boardData.boards ||
+        typeof boardIndex !== 'number' || boardIndex < 0 || boardIndex >= global.boardData.boards.length) {
+      event.returnValue = null
+      return
+    }
+
+    // Update scene timing to keep shots current, if available
+    if (typeof global.updateSceneTiming === 'function') {
+      try { global.updateSceneTiming() } catch (e) { /* no-op */ }
+    }
+
+    const board = global.boardData.boards[boardIndex]
+    event.returnValue = {
+      shot: board && board.shot,
+      number: board && board.number,
+      newShot: board && board.newShot
+    }
+  } catch (e) {
+    event.returnValue = null
+  }
 })
 
 ipcMain.on('getCurrentLanguage', (event) => {

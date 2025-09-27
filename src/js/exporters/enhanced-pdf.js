@@ -111,6 +111,37 @@ class EnhancedPDFExporter {
     }
   }
 
+  // Format dialogue with quotes and speaker recognition
+  formatDialogueString(text) {
+    if (!text || typeof text !== 'string') return text
+    let trimmed = text.trim()
+    if (!trimmed) return text
+
+    // If already wrapped in double quotes (allow whitespace around)
+    const hasLeadingQuote = /^"/.test(trimmed)
+    const hasTrailingQuote = /"$/.test(trimmed)
+
+    // Detect speaker pattern: Speaker: dialogue
+    const speakerMatch = trimmed.match(/^([^:]{1,60}):\s*(.+)$/)
+    if (speakerMatch) {
+      const speaker = speakerMatch[1].trim()
+      let content = speakerMatch[2].trim()
+      // Avoid double quoting content
+      const contentLeadingQuote = /^"/.test(content)
+      const contentTrailingQuote = /"$/.test(content)
+      if (!(contentLeadingQuote && contentTrailingQuote)) {
+        content = `"${content.replace(/"/g, '\\"')}"`
+      }
+      return `${speaker}: ${content}`
+    }
+
+    // No speaker: wrap whole line if not already quoted on both ends
+    if (!(hasLeadingQuote && hasTrailingQuote)) {
+      trimmed = `"${trimmed.replace(/"/g, '\\"')}"`
+    }
+    return trimmed
+  }
+
   async generatePages(doc, config, boardData, projectFileAbsolutePath) {
     const { layout } = config
     const boards = boardData.boards
@@ -616,7 +647,9 @@ class EnhancedPDFExporter {
 
       case 'dialogue':
         const dialogueFont = config.dialogueFont === 'courier-final-draft' ? 'courier' : 'bold'
-        this.drawTextColumn(doc, board.dialogue || '', x, y, width, height, dialogueFont, 9, 'left', imageTopY)
+        const rawDialogue = board.dialogue || ''
+        const formattedDialogue = config.putDialogueInQuotes ? this.formatDialogueString(rawDialogue) : rawDialogue
+        this.drawTextColumn(doc, formattedDialogue, x, y, width, height, dialogueFont, 9, 'left', imageTopY)
         break
 
       case 'action':
@@ -625,7 +658,10 @@ class EnhancedPDFExporter {
 
       case 'talks':
         // Combine dialogue and action for "talks" column
-        let talksText = [board.dialogue, board.action].filter(Boolean).join('\n\n')
+        let talksText = [
+          config.putDialogueInQuotes ? this.formatDialogueString(board.dialogue || '') : (board.dialogue || ''),
+          board.action
+        ].filter(Boolean).join('\n\n')
         if (!talksText && config.layoutPreset === 'japanese-storyboard') {
           talksText = 'Dialogue / sound notes'
         }
@@ -1049,22 +1085,45 @@ class EnhancedPDFExporter {
           imageX += col.width + config.layout.spacing
         }
         
-        // Draw filename in bottom-left of image area
+        // Measure image area to anchor filename at bottom-left within image bounds
+        const maxImageHeight = height - 10
+        const maxImageWidth = imageColumn.width - 4
+        const aspectRatio = config.boardData?.aspectRatio || 16 / 9
+        let imageWidth = maxImageWidth
+        let imageHeight = maxImageWidth / aspectRatio
+        if (imageHeight > maxImageHeight) {
+          imageHeight = maxImageHeight
+          imageWidth = maxImageHeight * aspectRatio
+        }
+        const imageDrawX = imageX + 2 + ((imageColumn.width - 4) - imageWidth) / 2
+        const imageDrawY = y + 2 + (maxImageHeight - imageHeight) / 2
+
+        // Filename style: small white text with black stroke (outline) for readability
         doc.font('thin')
         doc.fontSize(7)
+
+        const padding = 2
+        const tx = imageDrawX + padding
+        const ty = imageDrawY + imageHeight - 9 - padding // bottom-left inside image
+
+        // Draw outlined text: stroke (black) then fill (white)
+        doc.save()
         doc.fillColor('#ffffff')
-        
-        // Semi-transparent background
-        doc.fillColor('#000000')
-        doc.opacity(0.7)
-        const textWidth = doc.widthOfString(filename) + 8
-        doc.rect(imageX + 8, y + height - 25, textWidth, 15)
-        doc.fill()
-        
-        // White text
-        doc.opacity(1)
+        doc.strokeColor('#000000')
+        doc.lineWidth(0.8)
+        // PDFKit doesn't support stroking text directly; simulate outline by drawing text multiple times
+        const offsets = [
+          [-0.3, 0], [0.3, 0], [0, -0.3], [0, 0.3], // four directions
+          [-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3]
+        ]
+        offsets.forEach(([ox, oy]) => {
+          doc.fillColor('#000000')
+          doc.text(filename, tx + ox, ty + oy, { width: imageWidth - 4, height: 10, align: 'left' })
+        })
+        // Foreground white text
         doc.fillColor('#ffffff')
-        doc.text(filename, imageX + 12, y + height - 22)
+        doc.text(filename, tx, ty, { width: imageWidth - 4, height: 10, align: 'left' })
+        doc.restore()
       }
     }
   }

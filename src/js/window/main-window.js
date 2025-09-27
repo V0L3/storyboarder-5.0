@@ -251,9 +251,24 @@ let currentBoard = 0
 
 // Helper function to update currentBoard and keep window.currentBoard in sync
 const updateCurrentBoard = (newBoard) => {
+  const didChange = currentBoard !== newBoard
   currentBoard = newBoard
   if (typeof window !== 'undefined') {
     window.currentBoard = currentBoard
+    if (didChange) {
+      // Emit a custom event for components that rely on selection changes
+      try {
+        if (typeof document !== 'undefined' && document && typeof document.dispatchEvent === 'function') {
+          try {
+            document.dispatchEvent(new CustomEvent('boardSelectionChanged'))
+          } catch (e) {
+            document.dispatchEvent(new Event('boardSelectionChanged'))
+          }
+        }
+      } catch (e) {
+        // no-op
+      }
+    }
   }
 }
 
@@ -8135,6 +8150,19 @@ ipcRenderer.on('export-pdf-advanced', (event, config) => {
 
 // Add keyboard shortcuts for GIF grouping
 document.addEventListener('keydown', (e) => {
+  // Allow normal editing in inputs/textareas/contenteditable
+  const isEditableTarget = (el) => {
+    if (!el) return false
+    if (el.isContentEditable) return true
+    const tag = el.tagName ? el.tagName.toUpperCase() : ''
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return !el.readOnly && !el.disabled
+    if (el.closest) {
+      const container = el.closest('input, textarea, [contenteditable="true"], [contenteditable=""]')
+      if (container) return !(container.readOnly || container.disabled)
+    }
+    return false
+  }
+  if (isEditableTarget(e.target)) return
   // Ctrl+G: Group selected boards
   if (e.ctrlKey && !e.shiftKey && e.key === 'G') {
     e.preventDefault()

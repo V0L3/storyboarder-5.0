@@ -88,11 +88,64 @@ class EnhancedHTMLExporter {
             border-bottom: 1px solid #e9ecef;
             padding: 25px 30px;
             transition: box-shadow 0.2s ease, background-color 0.2s ease;
+            position: relative;
         }
         
         .board-row:hover {
             background: #f8f9fa;
             box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        
+        /* Done state styling */
+        .board-row.done {
+            opacity: 0.55;
+        }
+        .board-row.done .board-image {
+            filter: grayscale(1) contrast(0.9);
+        }
+        
+        /* Done toggle UI */
+        .row-controls {
+            position: absolute;
+            top: 8px;
+            right: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 5;
+        }
+        .done-toggle {
+            display: inline-flex;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+        .done-toggle input {
+            display: none;
+        }
+        .done-toggle .checkmark {
+            width: 18px;
+            height: 18px;
+            border-radius: 4px;
+            border: 2px solid #9ca3af;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: white;
+            font-size: 12px;
+            line-height: 1;
+            color: #10b981;
+            transition: all 0.15s ease;
+        }
+        .done-toggle:hover .checkmark {
+            border-color: #6b7280;
+        }
+        .done-toggle input:checked ~ .checkmark {
+            background: #10b9811a;
+            border-color: #10b981;
+        }
+        .done-toggle input:checked ~ .checkmark::after {
+            content: '✓';
         }
         
         .board-row:last-child {
@@ -545,11 +598,44 @@ class EnhancedHTMLExporter {
             });
         }
         
-        function initializeImageModal() {
-            const modal = document.getElementById('imageModal');
-            const modalImg = document.getElementById('modalImage');
-            const closeBtn = document.querySelector('.image-modal-close');
-            let currentZoom = 1;
+    function initializeImageModal() {
+          const modal = document.getElementById('imageModal');
+          const modalImg = document.getElementById('modalImage');
+          const modalContent = document.querySelector('.image-modal-content');
+          const closeBtn = document.querySelector('.image-modal-close');
+          let currentZoom = 1;
+          let minZoom = 0.1;
+          const maxZoom = 5;
+          let panX = 0;
+          let panY = 0;
+          let isPanning = false;
+          let lastX = 0;
+          let lastY = 0;
+          let naturalW = 0;
+          let naturalH = 0;
+
+          // Ensure container is suitable for absolute-positioned image we pan/zoom
+          if (modalContent) {
+            modalContent.style.position = 'relative';
+            modalContent.style.overflow = 'hidden';
+          }
+
+          // Ensure image is absolutely positioned from top-left
+          if (modalImg) {
+            modalImg.style.position = 'absolute';
+            modalImg.style.left = '0';
+            modalImg.style.top = '0';
+            modalImg.style.willChange = 'transform';
+            modalImg.style.maxWidth = 'none';
+            modalImg.style.maxHeight = 'none';
+            modalImg.style.objectFit = 'unset';
+          }
+
+          // Ensure close button remains clickable/visible
+          if (closeBtn) {
+            closeBtn.style.zIndex = '1001';
+            closeBtn.style.pointerEvents = 'auto';
+          }
             
             // Open modal when clicking on images
             document.addEventListener('click', function(e) {
@@ -557,8 +643,23 @@ class EnhancedHTMLExporter {
                     modal.style.display = 'block';
                     modalImg.src = e.target.src;
                     modalImg.alt = e.target.alt;
-                    currentZoom = 1;
-                    updateImageZoom();
+                    // Wait for image to load to compute fit scale
+                    const init = () => {
+                      naturalW = modalImg.naturalWidth || modalImg.width || 1;
+                      naturalH = modalImg.naturalHeight || modalImg.height || 1;
+                      // Lock element dimensions to intrinsic size so transforms are predictable
+                      modalImg.style.width = naturalW + 'px';
+                      modalImg.style.height = naturalH + 'px';
+                      fitToContain();
+                      // Force a layout read to get accurate clientWidth/Height
+                      void (modalContent || modal).clientWidth;
+                      updateImageZoom();
+                    };
+                    if (modalImg.complete) {
+                      init();
+                    } else {
+                      modalImg.onload = init;
+                    }
                 }
             });
             
@@ -575,23 +676,142 @@ class EnhancedHTMLExporter {
             
             // Zoom functions
             window.zoomIn = function() {
-                currentZoom = Math.min(currentZoom * 1.2, 5);
+                currentZoom = Math.min(currentZoom * 1.2, maxZoom);
                 updateImageZoom();
             };
             
             window.zoomOut = function() {
-                currentZoom = Math.max(currentZoom / 1.2, 0.1);
+                currentZoom = Math.max(currentZoom / 1.2, minZoom);
                 updateImageZoom();
             };
             
             window.resetZoom = function() {
-                currentZoom = 1;
+                fitToContain();
                 updateImageZoom();
             };
             
             function updateImageZoom() {
-                modalImg.style.transform = 'scale(' + currentZoom + ')';
+                clampPan();
+                modalImg.style.transformOrigin = '0 0';
+                modalImg.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + currentZoom + ')';
             }
+
+            // Wheel zoom with cursor focus
+            modalImg.addEventListener('wheel', function(e) {
+                e.preventDefault();
+                const container = modalContent || modal;
+                const rect = container.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+
+                const delta = e.deltaY < 0 ? 1 : -1;
+                const zoomStep = 0.1;
+                const newZoom = Math.min(maxZoom, Math.max(minZoom, currentZoom + delta * zoomStep));
+
+                if (newZoom === currentZoom) return;
+
+                // Convert mouse to image content coords (before zoom change)
+                // Compute content coords in image space using locked element size
+                const contentX = (mouseX - panX) / currentZoom;
+                const contentY = (mouseY - panY) / currentZoom;
+
+                // Update zoom
+                currentZoom = newZoom;
+
+                // Recompute pan so the point under cursor stays fixed
+                panX = Math.round(mouseX - contentX * currentZoom);
+                panY = Math.round(mouseY - contentY * currentZoom);
+
+                updateImageZoom();
+            }, { passive: false });
+
+            // Mouse drag panning
+            modalImg.addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                isPanning = true;
+                lastX = e.clientX;
+                lastY = e.clientY;
+                modalImg.style.cursor = 'grabbing';
+            });
+
+            window.addEventListener('mousemove', function(e) {
+                if (!isPanning) return;
+                const dx = e.clientX - lastX;
+                const dy = e.clientY - lastY;
+                lastX = e.clientX;
+                lastY = e.clientY;
+                panX += dx;
+                panY += dy;
+                updateImageZoom();
+            });
+
+            window.addEventListener('mouseup', function() {
+                if (!isPanning) return;
+                isPanning = false;
+                modalImg.style.cursor = 'grab';
+            });
+
+            // Fit image to container and center
+            function fitToContain() {
+                const container = modalContent || modal;
+                const cw = container.clientWidth || window.innerWidth;
+                const ch = container.clientHeight || window.innerHeight;
+                if (!naturalW || !naturalH) {
+                    naturalW = modalImg.naturalWidth || modalImg.width || 1;
+                    naturalH = modalImg.naturalHeight || modalImg.height || 1;
+                }
+                const scaleToFit = Math.min(cw / naturalW, ch / naturalH);
+                minZoom = Math.max(scaleToFit, 0.1);
+                currentZoom = minZoom;
+                const cs = getComputedStyle(modalImg);
+                const bw = (parseFloat(cs.borderLeftWidth)||0) + (parseFloat(cs.borderRightWidth)||0);
+                const bh = (parseFloat(cs.borderTopWidth)||0) + (parseFloat(cs.borderBottomWidth)||0);
+                const scaledW = naturalW * currentZoom + bw;
+                const scaledH = naturalH * currentZoom + bh;
+                panX = Math.round((cw - scaledW) * 0.5);
+                panY = Math.round((ch - scaledH) * 0.5);
+            }
+
+            // Clamp pan so content stays within container (center if smaller)
+            function clampPan() {
+                const container = modalContent || modal;
+                const cw = container.clientWidth || window.innerWidth;
+                const ch = container.clientHeight || window.innerHeight;
+                const cs = getComputedStyle(modalImg);
+                const bw = (parseFloat(cs.borderLeftWidth)||0) + (parseFloat(cs.borderRightWidth)||0);
+                const bh = (parseFloat(cs.borderTopWidth)||0) + (parseFloat(cs.borderBottomWidth)||0);
+                const scaledW = naturalW * currentZoom + bw;
+                const scaledH = naturalH * currentZoom + bh;
+                if (scaledW <= cw) {
+                    panX = Math.round((cw - scaledW) * 0.5);
+                } else {
+                    const minX = cw - scaledW;
+                    const maxX = 0;
+                    panX = Math.min(maxX, Math.max(minX, panX));
+                }
+                if (scaledH <= ch) {
+                    panY = Math.round((ch - scaledH) * 0.5);
+                } else {
+                    const minY = ch - scaledH;
+                    const maxY = 0;
+                    panY = Math.min(maxY, Math.max(minY, panY));
+                }
+            }
+
+            // Close on Escape
+            window.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    modal.style.display = 'none';
+                }
+            });
+
+            // Refit on resize
+            window.addEventListener('resize', function() {
+                if (modal.style.display === 'block') {
+                    fitToContain();
+                    updateImageZoom();
+                }
+            });
         }
     </script>
 </body>
@@ -635,6 +855,38 @@ class EnhancedHTMLExporter {
     if (typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
       groupsToProcess = window.exportIntegration.gifGroupManager.videoGroupManager.getAllGroups()
       console.log('[EnhancedHTML] Using groups from VideoGroupManager:', groupsToProcess.length)
+    }
+
+    // Shot "done" toggles
+    function setupDoneToggles() {
+      try {
+        const titleEl = document.querySelector('.header h1')
+        const projectName = titleEl ? titleEl.textContent.trim() : (document.title || 'project')
+        const storageKey = 'storyboarder-html-done:' + projectName
+        let doneMap = {}
+        try {
+          const raw = localStorage.getItem(storageKey)
+          if (raw) doneMap = JSON.parse(raw) || {}
+        } catch (e) { /* ignore */ }
+
+        const rows = document.querySelectorAll('.board-row')
+        rows.forEach(row => {
+          const idx = row.getAttribute('data-board-index')
+          const checkbox = row.querySelector('.done-checkbox')
+          if (!checkbox) return
+          const isDone = doneMap[idx] === true
+          checkbox.checked = isDone
+          row.classList.toggle('done', isDone)
+          checkbox.addEventListener('change', () => {
+            const checked = checkbox.checked
+            row.classList.toggle('done', checked)
+            doneMap[idx] = checked
+            try { localStorage.setItem(storageKey, JSON.stringify(doneMap)) } catch (e) {}
+          })
+        })
+      } catch (err) {
+        console.warn('setupDoneToggles error:', err)
+      }
     }
     
     // Fallback: try to get groups from boardData
@@ -837,7 +1089,7 @@ class EnhancedHTMLExporter {
     const isInGroup = config.groupedBoardIds && config.groupedBoardIds.has(boardIndex)
     const group = isInGroup ? config.boardToGroupMap.get(boardIndex) : null
     
-    let html = '<div class="board-row">\n'
+    let html = '<div class="board-row" data-board-index="' + boardIndex + '">\n'
     html += '  <div class="board-content">\n'
     
     // Left column: Shot number, timing, and lens info
@@ -852,6 +1104,13 @@ class EnhancedHTMLExporter {
     html += '      <div class="column-header">Lens</div>\n'
     const lensInfo = board.focalLength ? board.focalLength + 'mm' : (board.lens || '')
     html += '      <div class="lens-info editable-field" data-field="lens" data-board="' + boardIndex + '">' + this.escapeHtml(lensInfo) + '</div>\n'
+    // Row controls (Done toggle)
+    html += '    <div class="row-controls">\n'
+    html += '      <label class="done-toggle" title="Mark shot as done">\n'
+    html += '        <input type="checkbox" class="done-checkbox">\n'
+    html += '        <span class="checkmark"></span>\n'
+    html += '      </label>\n'
+    html += '    </div>\n'
     html += '    </div>\n'
     
     // Center column: Image and dialogue below if enabled
