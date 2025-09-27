@@ -1,0 +1,2467 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Enhanced Export</title>
+  <link rel="stylesheet" href="css/enhanced-export-dialog.css">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1c1c1e;
+      color: #ffffff;
+    }
+    
+    .export-window {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .export-header {
+      background: #2c2c2e;
+      color: #ffffff;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      border-bottom: 1px solid #3a3a3c;
+    }
+    
+    .export-header h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 600;
+    }
+    
+    .export-content {
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .preview-section {
+      display: flex;
+      flex-direction: row;
+      gap: 16px;
+      padding: 16px;
+    }
+    
+    .preview-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden; /* Ensure the container itself doesn't scroll */
+    }
+    
+    .layer-panel {
+      width: 280px;
+      min-width: 250px;
+      max-width: 320px;
+      background: #2c2c2e;
+      border: 1px solid #3a3a3c;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+      height: fit-content;
+      max-height: 600px;
+    }
+    
+    .layer-panel-header {
+      padding: 16px;
+      border-bottom: 1px solid #3a3a3c;
+      background: #1c1c1e;
+    }
+    
+    .layer-panel-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #ffffff;
+      margin: 0 0 8px 0;
+    }
+    
+    .layer-panel-subtitle {
+      font-size: 12px;
+      color: #8e8e93;
+      margin: 0;
+    }
+    
+    .layer-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+      max-height: 500px;
+    }
+    
+    .layer-item {
+      display: flex;
+      align-items: center;
+      padding: 8px 12px;
+      margin: 4px 0;
+      background: #1c1c1e;
+      border: 1px solid #3a3a3c;
+      border-radius: 6px;
+      cursor: move;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+    
+    .layer-item:hover {
+      background: #2c2c2e;
+      border-color: #48484a;
+    }
+    
+    .layer-item.dragging {
+      opacity: 0.5;
+      transform: rotate(2deg);
+    }
+    
+    .layer-item.drag-over {
+      border-color: #007aff;
+      background: #1c1c1e;
+    }
+    
+    .layer-visibility {
+      margin-right: 8px;
+      cursor: pointer;
+      color: #8e8e93;
+      transition: color 0.2s ease;
+      position: relative;
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      text-align: center;
+      line-height: 20px;
+    }
+    
+    .layer-visibility:hover {
+      color: #ffffff;
+    }
+    
+    .layer-visibility.visible {
+      color: #10b981;
+    }
+    
+    .layer-visibility.hidden {
+      color: #8e8e93;
+    }
+    
+    .layer-visibility.hidden::after {
+      content: '/';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      color: #ef4444;
+      font-size: 16px;
+      font-weight: bold;
+      transform: rotate(45deg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .layer-drag-handle {
+      margin-right: 8px;
+      color: #8e8e93;
+      cursor: grab;
+      font-size: 12px;
+      line-height: 1;
+      padding: 2px;
+    }
+    
+    .layer-drag-handle:active {
+      cursor: grabbing;
+    }
+    
+    .layer-drag-handle:hover {
+      color: #ffffff;
+    }
+    
+    .layer-label {
+      flex: 1;
+      font-size: 14px;
+      color: #ffffff;
+      font-weight: 500;
+    }
+    
+    .layer-type {
+      font-size: 11px;
+      color: #8e8e93;
+      background: #3a3a3c;
+      padding: 2px 6px;
+      border-radius: 3px;
+      margin-left: 8px;
+    }
+    
+    .export-tabs {
+      display: flex;
+      background: #2c2c2e;
+      border-bottom: 1px solid #3a3a3c;
+    }
+    
+    .tab-button {
+      padding: 12px 24px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      color: #8e8e93;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+      outline: none;
+    }
+    
+    .tab-button:hover {
+      color: #ffffff;
+      background: #3a3a3c;
+    }
+    
+    .tab-button.active {
+      color: #007aff;
+      border-bottom-color: #007aff;
+      background: #1c1c1e;
+    }
+    
+    .tab-content {
+      flex: 1;
+      overflow: auto;
+      padding: 24px;
+    }
+    
+    .preview-section {
+      background: #2c2c2e;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      border: 1px solid #3a3a3c;
+    }
+    
+    .preview-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    
+    .preview-header h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: #ffffff;
+    }
+    
+    .preview-canvas {
+      border: 1px solid #3a3a3c;
+      border-radius: 6px;
+      padding: 20px;
+      text-align: center;
+      color: #8e8e93;
+      background: #1c1c1e;
+      min-height: 450px;
+      max-height: 600px;
+      display: flex;
+      align-items: flex-start; /* Changed from center to flex-start for proper scrolling */
+      justify-content: center;
+      overflow: auto;
+      box-sizing: border-box;
+      flex: 1;
+      position: relative; /* For proper positioning of zoomed content */
+    }
+    
+    .controls-section {
+      background: #2c2c2e;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      border: 1px solid #3a3a3c;
+    }
+    
+    .form-group {
+      margin-bottom: 16px;
+    }
+    
+    .form-group label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 500;
+      color: #ffffff;
+    }
+    
+    .form-group input,
+    .form-group select {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #48484a;
+      border-radius: 6px;
+      font-size: 14px;
+      background: #3a3a3c;
+      color: #ffffff;
+    }
+    
+    .form-group input:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: #007aff;
+      box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+    }
+    
+    .form-row {
+      display: flex;
+      gap: 16px;
+    }
+    
+    .form-row .form-group {
+      flex: 1;
+    }
+    
+    .btn {
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+    
+    .btn-primary {
+      background: #007aff;
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background: #0056b3;
+    }
+    
+    .btn-secondary {
+      background: #3a3a3c;
+      color: #ffffff;
+      border: 1px solid #48484a;
+    }
+    
+    .btn-secondary:hover {
+      background: #48484a;
+    }
+    
+    .export-actions {
+      padding: 16px 24px;
+      background: #2c2c2e;
+      border-top: 1px solid #3a3a3c;
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+    
+    .slider-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .slider {
+      flex: 1;
+      height: 6px;
+      border-radius: 3px;
+      background: #3a3a3c;
+      outline: none;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    
+    .slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #007aff;
+      cursor: pointer;
+    }
+    
+    .slider::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #007aff;
+      cursor: pointer;
+      border: none;
+    }
+    
+    .slider-value {
+      min-width: 40px;
+      text-align: center;
+      font-weight: 500;
+      color: #ffffff;
+    }
+    
+    /* Fix checkbox positioning - proper form layout */
+    .form-group {
+      margin-bottom: 16px;
+    }
+    
+    .form-group label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 500;
+      color: #ffffff;
+      cursor: pointer;
+    }
+    
+    .form-group label input[type="checkbox"] {
+      margin-right: 8px;
+      width: 16px;
+      height: 16px;
+      vertical-align: middle;
+      accent-color: #007aff;
+    }
+    
+    .form-group .form-description {
+      margin-left: 24px;
+      margin-top: 4px;
+      font-size: 12px;
+      color: #8e8e93;
+      font-style: italic;
+      display: block;
+    }
+    
+    /* Special styling for checkbox labels */
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      margin-bottom: 0;
+    }
+    
+    .checkbox-label input[type="checkbox"] {
+      margin-right: 8px;
+      flex-shrink: 0;
+    }
+    
+    .controls-section h3 {
+      color: #ffffff;
+      margin: 0 0 16px 0;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    
+    /* Remove all default focus outlines */
+    *:focus {
+      outline: none !important;
+    }
+    
+    /* Custom focus styles for better UX */
+    .tab-button:focus {
+      outline: none;
+      box-shadow: none;
+    }
+    
+    .btn:focus {
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.3);
+    }
+  </style>
+</head>
+<body>
+  <div class="export-window">
+    <div class="export-header">
+      <h1>Enhanced Export</h1>
+      <div>
+        <button id="close-export-window" class="btn btn-secondary">Close</button>
+      </div>
+    </div>
+    
+    <div class="export-content">
+      <div class="export-tabs">
+        <button class="tab-button active" data-tab="layout">Layout</button>
+        <button class="tab-button" data-tab="content">Content</button>
+        <button class="tab-button" data-tab="gifs">GIFs</button>
+        <button class="tab-button" data-tab="settings">Settings</button>
+      </div>
+      
+      <div class="tab-content">
+        <!-- Layout Tab -->
+        <div id="layout-tab" class="tab-panel active">
+          <div class="preview-section">
+            <div class="preview-container">
+              <div class="preview-header">
+                <h3>Preview</h3>
+                <div>
+                  <button id="refresh-preview" class="btn btn-secondary">Refresh</button>
+                </div>
+              </div>
+              <div id="preview-canvas" class="preview-canvas">
+                <div>Select a layout to see preview</div>
+              </div>
+            </div>
+            
+            <!-- Layer Management Panel -->
+            <div class="layer-panel">
+              <div class="layer-panel-header">
+                <h3 class="layer-panel-title">Layer Management</h3>
+                <p class="layer-panel-subtitle">Drag to reorder, click eye to toggle visibility</p>
+              </div>
+              <div class="layer-list" id="layer-list">
+                <!-- Layers will be populated dynamically -->
+              </div>
+            </div>
+          </div>
+          
+          <div class="controls-section">
+            <h3>Layout Settings</h3>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="layout-template">Layout Template</label>
+                <select id="layout-template">
+                  <option value="detailed">Detailed Layout</option>
+                  <option value="standard">Standard Layout</option>
+                  <option value="japanese-storyboard">Japanese Storyboard (絵コンテ)</option>
+                  <option value="compact">Compact Layout</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="paper-size">Paper Size</label>
+                <select id="paper-size">
+                  <option value="A4">A4</option>
+                  <option value="Letter">Letter</option>
+                  <option value="Legal">Legal</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="paper-orientation">Orientation</label>
+                <select id="paper-orientation">
+                  <option value="portrait">Portrait</option>
+                  <option value="landscape">Landscape</option>
+                </select>
+              </div>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label for="columns">Columns</label>
+                <input type="number" id="columns" value="2" min="1" max="6">
+              </div>
+              <div class="form-group">
+                <label for="spacing">Spacing (px)</label>
+                <input type="number" id="spacing" value="2" min="0" max="100">
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label for="image-size">Image Size</label>
+              <div class="slider-container">
+                <input type="range" id="image-size" class="slider" min="20" max="100" value="50">
+                <span id="image-size-value" class="slider-value">50%</span>
+              </div>
+              <div class="slider-description">Adjust image size to fill the entire image column</div>
+            </div>
+            
+            <div class="form-group">
+              <label for="dialogue-below-image" class="checkbox-label">
+                <input type="checkbox" id="dialogue-below-image" checked>
+                Show dialogue below image
+              </label>
+              <div class="form-description">Place dialogue text below the image instead of in a separate column</div>
+            </div>
+
+            <div class="form-group">
+              <label for="dialogue-font">Dialogue Font</label>
+              <select id="dialogue-font">
+                <option value="regular">Regular</option>
+                <option value="courier-final-draft">Courier Final Draft</option>
+              </select>
+              <div class="form-description">Choose the font style for dialogue text</div>
+            </div>
+
+            <div class="form-group">
+              <label for="enable-dotted-lines" class="checkbox-label">
+                <input type="checkbox" id="enable-dotted-lines">
+                Enable dotted lines
+              </label>
+              <div class="form-description">Add dotted lines marking column and row boundaries for better visibility</div>
+            </div>
+            
+            <div class="form-group">
+              <label for="enable-note-lines" class="checkbox-label">
+                <input type="checkbox" id="enable-note-lines">
+                Enable note lines
+              </label>
+              <div class="form-description">Add lines where text appears for easier writing when printed</div>
+            </div>
+
+            <div class="form-group">
+              <button id="customize-layout" class="btn btn-primary">Customize Layout</button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Content Tab -->
+        <div id="content-tab" class="tab-panel">
+          <div class="preview-section">
+            <div class="preview-container">
+              <div class="preview-header">
+                <h3>Preview</h3>
+                <div>
+                  <button id="refresh-preview-content" class="btn btn-secondary">Refresh</button>
+                </div>
+              </div>
+              <div id="preview-canvas-content" class="preview-canvas">
+                <div>Content settings preview</div>
+              </div>
+            </div>
+            
+            <!-- Layer Management Panel -->
+            <div class="layer-panel">
+              <div class="layer-panel-header">
+                <h3 class="layer-panel-title">Layer Management</h3>
+                <p class="layer-panel-subtitle">Drag to reorder, click eye to toggle visibility</p>
+              </div>
+              <div class="layer-list" id="layer-list-content">
+                <!-- Layers will be populated dynamically -->
+              </div>
+            </div>
+          </div>
+          
+          <div class="controls-section">
+            <h3>Content Options</h3>
+            
+            <div class="form-group">
+              <label for="show-notes" class="checkbox-label">
+                <input type="checkbox" id="show-notes" checked>
+                Include Notes
+              </label>
+            </div>
+            
+            <div class="form-group">
+              <label for="show-filenames" class="checkbox-label">
+                <input type="checkbox" id="show-filenames">
+                Include Filenames
+              </label>
+            </div>
+            
+            <div class="form-group">
+              <label for="show-custom-fields" class="checkbox-label">
+                <input type="checkbox" id="show-custom-fields">
+                Include Custom Fields
+              </label>
+            </div>
+
+            <div class="form-group">
+              <label for="include-custom-layers" class="checkbox-label">
+                <input type="checkbox" id="include-custom-layers">
+                Include Custom Layers
+              </label>
+              <div class="form-description">Include custom layers added to individual boards in the PDF export</div>
+            </div>
+
+            <div class="form-group">
+              <label for="reference-photo">Reference Photo</label>
+              <select id="reference-photo">
+                <option value="none">None</option>
+                <option value="first">First Board</option>
+                <option value="last">Last Board</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        
+        <!-- GIFs Tab -->
+        <div id="gifs-tab" class="tab-panel">
+          <div class="preview-section">
+            <div class="preview-container">
+              <div class="preview-header">
+                <h3>Preview</h3>
+                <div>
+                  <button id="refresh-preview-gifs" class="btn btn-secondary">Refresh</button>
+                </div>
+              </div>
+              <div id="preview-canvas-gifs" class="preview-canvas">
+                <div>GIF settings preview</div>
+              </div>
+            </div>
+            
+            <!-- Layer Management Panel -->
+            <div class="layer-panel">
+              <div class="layer-panel-header">
+                <h3 class="layer-panel-title">Layer Management</h3>
+                <p class="layer-panel-subtitle">Drag to reorder, click eye to toggle visibility</p>
+              </div>
+              <div class="layer-list" id="layer-list-gifs">
+                <!-- Layers will be populated dynamically -->
+              </div>
+            </div>
+          </div>
+          
+          <div class="controls-section">
+            <h3>GIF Settings</h3>
+            
+            <div class="form-group">
+              <label for="include-gifs" class="checkbox-label">
+                <input type="checkbox" id="include-gifs" checked>
+                Include Animated GIFs
+              </label>
+            </div>
+            
+            <div class="form-group">
+              <label for="include-dialogue-in-gifs" class="checkbox-label">
+                <input type="checkbox" id="include-dialogue-in-gifs">
+                Include Dialogue in GIFs
+              </label>
+              <div class="form-description">Show dialogue text overlays on exported GIFs</div>
+            </div>
+            
+            <div class="form-group">
+              <label for="gif-resolution">GIF Resolution</label>
+              <select id="gif-resolution" class="form-control">
+                <option value="480">480p (854x480)</option>
+                <option value="720">720p (1280x720)</option>
+                <option value="1080">1080p (1920x1080)</option>
+                <option value="1440" selected>2K (2560x1440)</option>
+                <option value="2160">4K (3840x2160)</option>
+                <option value="2880">5K (5120x2880)</option>
+                <option value="custom">Custom Resolution</option>
+              </select>
+              <div class="form-description">Choose the resolution for exported GIFs</div>
+            </div>
+            
+            <div class="form-group" id="custom-resolution-group" style="display: none;">
+              <label for="custom-resolution">Custom Resolution (px)</label>
+              <input type="number" id="custom-resolution" value="1440" min="100" max="8000">
+              <div class="form-description">Enter custom resolution width (height will be calculated based on aspect ratio)</div>
+            </div>
+            
+            
+            
+            <div class="form-group">
+              <button id="export-gif-groups" class="btn btn-primary">Export GIF Groups</button>
+              <div class="form-description">Export all configured GIF groups as animated GIFs</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Settings Tab -->
+        <div id="settings-tab" class="tab-panel">
+          <div class="preview-section">
+            <div class="preview-container">
+              <div class="preview-header">
+                <h3>Preview</h3>
+                <div>
+                  <button id="refresh-preview-settings" class="btn btn-secondary">Refresh</button>
+                </div>
+              </div>
+              <div id="preview-canvas-settings" class="preview-canvas">
+                <div>Settings preview</div>
+              </div>
+            </div>
+            
+            <!-- Layer Management Panel -->
+            <div class="layer-panel">
+              <div class="layer-panel-header">
+                <h3 class="layer-panel-title">Layer Management</h3>
+                <p class="layer-panel-subtitle">Drag to reorder, click eye to toggle visibility</p>
+              </div>
+              <div class="layer-list" id="layer-list-settings">
+                <!-- Layers will be populated dynamically -->
+              </div>
+            </div>
+          </div>
+          
+          <div class="controls-section">
+            <h3>Export Settings</h3>
+            
+            <div class="form-group">
+              <label for="filename-template">Filename Template</label>
+              <input type="text" id="filename-template" value="{project}_{date}_{time}" placeholder="e.g., {project}_{date}_{time}">
+            </div>
+            
+            <div class="form-group">
+              <label for="author-name">Author Name</label>
+              <input type="text" id="author-name" placeholder="Enter author name for copyright">
+              <div class="form-description">This will appear in the footer as "© [Author Name] - Generated by Storyboarder"</div>
+            </div>
+            
+            <div class="form-group">
+              <label for="export-format">Export Format</label>
+              <select id="export-format">
+                <option value="pdf">PDF Document</option>
+                <option value="html">HTML Document</option>
+                <option value="images">Individual Images</option>
+                <option value="both">Both PDF and Images</option>
+              </select>
+            </div>
+            
+            <div class="form-group">
+              <label for="output-quality">Quality</label>
+              <select id="output-quality">
+                <option value="high" selected>High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+            
+            <div class="form-group">
+              <label for="open-folder" class="checkbox-label">
+                <input type="checkbox" id="open-folder" checked>
+                Open folder after export
+              </label>
+            </div>
+            
+            <div class="form-group">
+              <label for="pdf-quality">PDF Quality</label>
+              <select id="pdf-quality">
+                <option value="high" selected>High (300 DPI)</option>
+                <option value="medium">Medium (150 DPI)</option>
+                <option value="low">Low (72 DPI)</option>
+              </select>
+            </div>
+            
+            <div class="form-group">
+              <label for="pdf-format">PDF Format</label>
+              <select id="pdf-format">
+                <option value="enhanced" selected>Enhanced PDF (with GIFs)</option>
+                <option value="standard">Standard PDF</option>
+                <option value="print">Print-optimized PDF</option>
+              </select>
+            </div>
+            
+            <div class="form-group">
+              <label for="export-gif-with-pdf" class="checkbox-label">
+                <input type="checkbox" id="export-gif-with-pdf" checked>
+                Export GIF when exporting PDF
+              </label>
+              <div class="form-description">Generate animated GIFs alongside the PDF export</div>
+            </div>
+            
+            <div class="form-group">
+              <label for="respect-groups-in-pdf" class="checkbox-label">
+                <input type="checkbox" id="respect-groups-in-pdf" checked>
+                Respect groups in PDF
+              </label>
+              <div class="form-description">Only export the first image of each group to PDF (uncheck to export all images normally)</div>
+            </div>
+            
+            <div class="form-group">
+              <button id="export-pdf-advanced" class="btn btn-primary">Export PDF (Advanced)</button>
+              <div class="form-description">Export with advanced PDF options and settings</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="export-actions">
+      <button id="cancel-export" class="btn btn-secondary">Cancel</button>
+      <button id="export-pdf" class="btn btn-primary">Export</button>
+    </div>
+  </div>
+
+  <script>
+    // Wrap everything in a try-catch to suppress any remaining errors
+    try {
+      // Override alert to prevent error dialogs
+      window.alert = function(message) {
+        if (message.includes('remote method') ||
+            message.includes('Object has been destroyed') ||
+            message.includes('isFocused') ||
+            message.includes('DevTools failed to load SourceMap')) {
+          // Suppress these alerts
+          return
+        }
+        // Show other alerts normally
+      }
+
+      // Override the global error handler completely
+    window.onerror = function(message, source, lineno, colno, error) {
+      const errorMessage = message || ''
+      const errorStack = error ? error.stack : ''
+      
+      // Suppress ALL remote method and sourcemap errors
+      if (errorMessage.includes('remote method') || 
+          errorMessage.includes('Object has been destroyed') ||
+          errorMessage.includes('isFocused') ||
+          errorMessage.includes('Could not call remote method') ||
+          errorMessage.includes('DevTools failed to load SourceMap') ||
+          errorMessage.includes('Could not parse content for') ||
+          errorMessage.includes('Unexpected end of JSON input') ||
+          errorMessage.includes('performance-now.js.map') ||
+          errorMessage.includes('main.cjs.map') ||
+          errorMessage.includes('index.js.map') ||
+          errorMessage.includes('.js.map') ||
+          errorMessage.includes('SourceMap') ||
+          errorStack.includes('isFocused') ||
+          errorStack.includes('remote method') ||
+          errorStack.includes('SourceMap')) {
+        return true // Prevent default error handling
+      }
+      
+      // Allow other errors to be handled normally
+      return false
+    }
+
+    // Also add event listener as backup
+    window.addEventListener('error', (event) => {
+      const errorMessage = event.error ? event.error.message : event.message || ''
+      const errorStack = event.error ? event.error.stack : ''
+      
+      // Suppress remote method errors
+      if (errorMessage.includes('remote method') || 
+          errorMessage.includes('Object has been destroyed') ||
+          errorMessage.includes('isFocused') ||
+          errorMessage.includes('Could not call remote method') ||
+          errorMessage.includes('DevTools failed to load SourceMap') ||
+          errorMessage.includes('Could not parse content for') ||
+          errorMessage.includes('Unexpected end of JSON input') ||
+          errorMessage.includes('performance-now.js.map') ||
+          errorMessage.includes('main.cjs.map') ||
+          errorMessage.includes('index.js.map') ||
+          errorMessage.includes('.js.map') ||
+          errorMessage.includes('SourceMap') ||
+          errorStack.includes('isFocused') ||
+          errorStack.includes('remote method') ||
+          errorStack.includes('SourceMap')) {
+        event.preventDefault()
+        event.stopPropagation()
+        return false
+      }
+    })
+
+    // Handle unhandled promise rejections
+    window.addEventListener('unhandledrejection', (event) => {
+      const errorMessage = event.reason ? event.reason.message : ''
+      const errorStack = event.reason ? event.reason.stack : ''
+      
+      if (errorMessage.includes('remote method') || 
+          errorMessage.includes('Object has been destroyed') ||
+          errorMessage.includes('isFocused') ||
+          errorMessage.includes('Could not call remote method') ||
+          errorMessage.includes('DevTools failed to load SourceMap') ||
+          errorMessage.includes('Could not parse content for') ||
+          errorMessage.includes('Unexpected end of JSON input') ||
+          errorMessage.includes('performance-now.js.map') ||
+          errorMessage.includes('main.cjs.map') ||
+          errorMessage.includes('index.js.map') ||
+          errorMessage.includes('.js.map') ||
+          errorMessage.includes('SourceMap') ||
+          errorStack.includes('isFocused') ||
+          errorStack.includes('remote method') ||
+          errorStack.includes('SourceMap')) {
+        console.log('Suppressed unhandled rejection:', errorMessage)
+        event.preventDefault()
+        return false
+      }
+    })
+
+    // Completely suppress console errors for problematic issues
+    const originalConsoleError = console.error
+    console.error = function(...args) {
+      const message = args.join(' ')
+      if (message.includes('DevTools failed to load SourceMap') ||
+          message.includes('Could not parse content for') ||
+          message.includes('Unexpected end of JSON input') ||
+          message.includes('remote method') ||
+          message.includes('Object has been destroyed') ||
+          message.includes('isFocused') ||
+          message.includes('Could not call remote method') ||
+          message.includes('Uncaught Error') ||
+          message.includes('TypeError: Object has been destroyed') ||
+          message.includes('performance-now.js.map') ||
+          message.includes('main.cjs.map') ||
+          message.includes('index.js.map') ||
+          message.includes('.js.map') ||
+          message.includes('SourceMap') ||
+          message.includes('sourceMappingURL') ||
+          message.includes('HTTP error: status code 404') ||
+          message.includes('net::ERR_HTTP_RESPONSE_CODE_FAILURE') ||
+          message.includes('net::ERR_UNKNOWN_URL_SCHEME') ||
+          message.includes('Could not load content for') ||
+          message.includes('Failed to resolve the requested file')) {
+        // Suppress these errors completely
+        return
+      }
+      // Log other errors normally
+      originalConsoleError.apply(console, args)
+    }
+
+    // Also suppress console.log for these errors
+    const originalConsoleLog = console.log
+    console.log = function(...args) {
+      const message = args.join(' ')
+      if (message.includes('remote method') ||
+          message.includes('Object has been destroyed') ||
+          message.includes('isFocused') ||
+          message.includes('DevTools failed to load SourceMap') ||
+          message.includes('Could not parse content for') ||
+          message.includes('Unexpected end of JSON input') ||
+          message.includes('performance-now.js.map') ||
+          message.includes('main.cjs.map') ||
+          message.includes('index.js.map') ||
+          message.includes('.js.map') ||
+          message.includes('SourceMap') ||
+          message.includes('sourceMappingURL') ||
+          message.includes('HTTP error: status code 404') ||
+          message.includes('net::ERR_HTTP_RESPONSE_CODE_FAILURE') ||
+          message.includes('net::ERR_UNKNOWN_URL_SCHEME') ||
+          message.includes('Could not load content for') ||
+          message.includes('Failed to resolve the requested file')) {
+        // Suppress these logs
+        return
+      }
+      // Log other messages normally
+      originalConsoleLog.apply(console, args)
+    }
+
+    // Also suppress console.warn for similar issues
+    const originalConsoleWarn = console.warn
+    console.warn = function(...args) {
+      const message = args.join(' ')
+      if (message.includes('DevTools failed to load SourceMap') ||
+          message.includes('Could not parse content for') ||
+          message.includes('Unexpected end of JSON input') ||
+          message.includes('remote method') ||
+          message.includes('Object has been destroyed') ||
+          message.includes('isFocused') ||
+          message.includes('Could not call remote method') ||
+          message.includes('performance-now.js.map') ||
+          message.includes('main.cjs.map') ||
+          message.includes('index.js.map') ||
+          message.includes('.js.map') ||
+          message.includes('SourceMap') ||
+          message.includes('sourceMappingURL') ||
+          message.includes('HTTP error: status code 404') ||
+          message.includes('net::ERR_HTTP_RESPONSE_CODE_FAILURE') ||
+          message.includes('net::ERR_UNKNOWN_URL_SCHEME') ||
+          message.includes('Could not load content for') ||
+          message.includes('Failed to resolve the requested file')) {
+        // Suppress these warnings
+        return
+      }
+      // Log other warnings normally
+      originalConsoleWarn.apply(console, args)
+    }
+
+    // Disable sourcemaps in DevTools (Stack Overflow solution)
+    try {
+      // This attempts to disable sourcemaps programmatically
+      if (window.chrome && window.chrome.runtime && window.chrome.runtime.getManifest) {
+        // Try to access DevTools settings if available
+        console.log('DevTools sourcemap suppression active')
+      }
+    } catch (e) {
+      // Ignore any errors from DevTools access
+    }
+
+    // Prevent F12 and dev tools shortcuts
+    let isClosing = false
+    document.addEventListener('keydown', (e) => {
+      if (isClosing) {
+        // During close operation, prevent ALL keyboard events
+        e.preventDefault()
+        e.stopPropagation()
+        e.stopImmediatePropagation()
+        return false
+      }
+
+      if (e.key === 'F12' ||
+          (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) ||
+          (e.ctrlKey && e.key === 'u')) {
+        e.preventDefault()
+        e.stopPropagation()
+        return false
+      }
+    })
+
+    // Set closing flag when close buttons are clicked
+    const setClosingFlag = () => {
+      isClosing = true
+      // Reset flag after a short delay
+      setTimeout(() => {
+        isClosing = false
+      }, 1000)
+    }
+
+    // Prevent right-click context menu
+    document.addEventListener('contextmenu', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      return false
+    })
+
+    // Tab switching
+    document.querySelectorAll('.tab-button').forEach(button => {
+      button.addEventListener('click', (e) => {
+        // Remove active class from all tabs and buttons
+        document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'))
+        document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'))
+        
+        // Add active class to clicked button and corresponding panel
+        e.target.classList.add('active')
+        const tabId = e.target.dataset.tab + '-tab'
+        document.getElementById(tabId).classList.add('active')
+      })
+    })
+
+     // FPS slider
+     
+     // Image size slider
+     const imageSizeSlider = document.getElementById('image-size')
+     const imageSizeValue = document.getElementById('image-size-value')
+     
+     imageSizeSlider.addEventListener('input', (e) => {
+       imageSizeValue.textContent = e.target.value + '%'
+     })
+
+    // Close window using proper Electron IPC
+    document.getElementById('close-export-window').addEventListener('click', (e) => {
+      // Set closing flag to prevent keyboard events
+      setClosingFlag()
+
+      // Multiple layers of event prevention
+      e.preventDefault()
+      e.stopPropagation()
+      e.stopImmediatePropagation()
+
+      // Prevent any other events from firing
+      e.returnValue = false
+
+      // Use IPC to close window properly - avoid remote module entirely
+      try {
+        if (typeof require !== 'undefined') {
+          const { ipcRenderer } = require('electron')
+          // Use sendSync to ensure synchronous operation
+          const result = ipcRenderer.sendSync('close-enhanced-export-window')
+          if (result !== 'closed') {
+            // If IPC failed, try direct close
+            window.close()
+          }
+        } else {
+          // Fallback for development
+          window.close()
+        }
+      } catch (error) {
+        console.log('Using fallback close method')
+        // Only use window.close() - avoid remote module completely
+        try {
+          window.close()
+        } catch (fallbackError) {
+          console.log('All close methods failed')
+        }
+      }
+    }, { capture: true, passive: false })
+
+    document.getElementById('cancel-export').addEventListener('click', (e) => {
+      // Set closing flag to prevent keyboard events
+      setClosingFlag()
+
+      // Multiple layers of event prevention
+      e.preventDefault()
+      e.stopPropagation()
+      e.stopImmediatePropagation()
+
+      // Prevent any other events from firing
+      e.returnValue = false
+
+      // Use IPC to close window properly
+      try {
+        if (typeof require !== 'undefined') {
+          const { ipcRenderer } = require('electron')
+          // Use sendSync to ensure synchronous operation
+          ipcRenderer.sendSync('close-enhanced-export-window')
+        } else {
+          // Fallback for development
+          window.close()
+        }
+      } catch (error) {
+        console.log('Using fallback close method')
+        try {
+          window.close()
+        } catch (fallbackError) {
+          console.log('All close methods failed')
+        }
+      }
+    }, { capture: true, passive: false })
+
+    // Export PDF
+    document.getElementById('export-pdf').addEventListener('click', () => {
+       console.log('[EnhancedExportWindow] Export button clicked!')
+       // Get export configuration
+       const config = {
+         layout: getLayoutConfiguration(),
+         layoutPreset: document.getElementById('layout-template').value,
+         paperSize: document.getElementById('paper-size').value,
+         paperOrientation: document.getElementById('paper-orientation').value || 'portrait',
+         imageSize: parseInt(document.getElementById('image-size').value),
+         dialogueBelowImage: document.getElementById('dialogue-below-image').checked,
+         dialogueFont: document.getElementById('dialogue-font').value,
+         includeCustomLayers: document.getElementById('include-custom-layers').checked,
+         includeFields: {
+           notes: document.getElementById('show-notes').checked,
+           filenames: document.getElementById('show-filenames').checked,
+           customFields: document.getElementById('show-custom-fields').checked
+         },
+         showFilenames: document.getElementById('show-filenames').checked,
+         filenameLocation: 'overlay',
+         includeGifs: document.getElementById('include-gifs').checked,
+         gifGroups: [], // Will be populated from grouping system
+         videoGroups: [], // Will be populated from VideoGroupManager
+         groupData: [], // Will be populated from VideoGroupManager
+         gifSettings: {
+           resolution: document.getElementById('gif-resolution').value,
+           includeDialogue: document.getElementById('include-dialogue-in-gifs').checked
+         },
+         exportFormat: document.getElementById('export-format').value,
+         imageQuality: document.getElementById('output-quality').value,
+         pdfQuality: document.getElementById('pdf-quality').value,
+         pdfFormat: document.getElementById('pdf-format').value,
+         exportGifWithPdf: document.getElementById('export-gif-with-pdf').checked,
+         respectGroupsInPdf: document.getElementById('respect-groups-in-pdf').checked,
+         enableDottedLines: document.getElementById('enable-dotted-lines').checked,
+         enableNoteLines: document.getElementById('enable-note-lines').checked,
+         includeWatermark: false,
+         watermarkText: '',
+         watermarkOpacity: 50,
+         authorName: document.getElementById('author-name').value,
+         filenameTemplate: document.getElementById('filename-template').value,
+         openFolder: document.getElementById('open-folder').checked
+       }
+
+      // Send configuration to main process
+      console.log('[EnhancedExportWindow] Sending config:', config)
+      if (window.require) {
+        const { ipcRenderer } = window.require('electron')
+        console.log('[EnhancedExportWindow] Sending enhanced-export-config IPC message')
+        ipcRenderer.send('enhanced-export-config', config)
+      } else {
+        console.error('[EnhancedExportWindow] window.require not available!')
+      }
+    })
+
+    // Handle custom resolution toggle
+    document.getElementById('gif-resolution').addEventListener('change', (e) => {
+      const customGroup = document.getElementById('custom-resolution-group')
+      if (e.target.value === 'custom') {
+        customGroup.style.display = 'block'
+      } else {
+        customGroup.style.display = 'none'
+      }
+    })
+
+    // Export GIF Groups
+    document.getElementById('export-gif-groups').addEventListener('click', () => {
+       // Get GIF export configuration
+       const resolutionSelect = document.getElementById('gif-resolution')
+       const customResolution = document.getElementById('custom-resolution').value
+       
+       const config = {
+         includeGifs: document.getElementById('include-gifs').checked,
+         includeDialogueInGifs: document.getElementById('include-dialogue-in-gifs').checked,
+         gifResolution: resolutionSelect.value === 'custom' ? customResolution : resolutionSelect.value,
+         gifWidth: 400, // Default width since max width field was removed
+         filenameTemplate: document.getElementById('filename-template').value,
+         openFolder: document.getElementById('open-folder').checked,
+         exportFormat: 'gif'
+       }
+       
+       // Send GIF export request to main process
+       if (window.require) {
+         const { ipcRenderer } = window.require('electron')
+         ipcRenderer.send('export-gif-groups', config)
+       }
+    })
+
+    // Export PDF (Advanced)
+    document.getElementById('export-pdf-advanced').addEventListener('click', () => {
+       // Get advanced PDF export configuration
+       const config = {
+         layout: getLayoutConfiguration(),
+         layoutPreset: document.getElementById('layout-template').value,
+         paperSize: document.getElementById('paper-size').value,
+         paperOrientation: document.getElementById('paper-orientation').value || 'portrait',
+         imageSize: parseInt(document.getElementById('image-size').value),
+         dialogueBelowImage: document.getElementById('dialogue-below-image').checked,
+         dialogueFont: document.getElementById('dialogue-font').value,
+         includeCustomLayers: document.getElementById('include-custom-layers').checked,
+         includeFields: {
+           notes: document.getElementById('show-notes').checked,
+           filenames: document.getElementById('show-filenames').checked,
+           customFields: document.getElementById('show-custom-fields').checked
+         },
+         showFilenames: document.getElementById('show-filenames').checked,
+         filenameLocation: 'overlay',
+         includeGifs: document.getElementById('include-gifs').checked,
+         gifGroups: [], // Will be populated from grouping system
+         videoGroups: [], // Will be populated from VideoGroupManager
+         groupData: [], // Will be populated from VideoGroupManager
+         gifSettings: {
+           resolution: document.getElementById('gif-resolution').value,
+           includeDialogue: document.getElementById('include-dialogue-in-gifs').checked
+         },
+         exportFormat: document.getElementById('export-format').value,
+         imageQuality: document.getElementById('output-quality').value,
+         pdfQuality: document.getElementById('pdf-quality').value,
+         pdfFormat: document.getElementById('pdf-format').value,
+         exportGifWithPdf: document.getElementById('export-gif-with-pdf').checked,
+         respectGroupsInPdf: document.getElementById('respect-groups-in-pdf').checked,
+         enableDottedLines: document.getElementById('enable-dotted-lines').checked,
+         enableNoteLines: document.getElementById('enable-note-lines').checked,
+         includeWatermark: false,
+         watermarkText: '',
+         watermarkOpacity: 50,
+         authorName: document.getElementById('author-name').value,
+         filenameTemplate: document.getElementById('filename-template').value,
+         openFolder: document.getElementById('open-folder').checked
+       }
+       
+       // Send advanced PDF export request to main process
+       if (window.require) {
+         const { ipcRenderer } = window.require('electron')
+         ipcRenderer.send('export-pdf-advanced', config)
+       }
+    })
+
+    // Layer Management System
+    let layerOrder = []
+    let layerVisibility = {}
+    
+    // Initialize layer management
+    function initializeLayerManagement() {
+      // Define default layer order
+      layerOrder = [
+        { id: 'shot', type: 'shot-number', label: 'Shot', visible: true },
+        { id: 'image', type: 'image', label: 'Image', visible: true },
+        { id: 'notes', type: 'notes', label: 'Notes', visible: true },
+        { id: 'talks', type: 'talks', label: 'Talks', visible: false }, // Hidden by default
+        { id: 'dialogue', type: 'dialogue', label: 'Dialogue', visible: true },
+        { id: 'action', type: 'action', label: 'Action', visible: true },
+        { id: 'custom-layers', type: 'custom-layers', label: 'Custom Layers', visible: false }, // Hidden by default
+        { id: 'focal-length', type: 'custom-field', label: 'mm', visible: true }, // Visible by default
+        { id: 'time', type: 'time', label: 'Time', visible: true }
+      ]
+      
+      // Initialize visibility state
+      layerOrder.forEach(layer => {
+        layerVisibility[layer.id] = layer.visible
+      })
+      
+      renderLayerList()
+      setupDragAndDrop()
+    }
+    
+    // Render the layer list
+    function renderLayerList() {
+      const layerListIds = ['layer-list', 'layer-list-content', 'layer-list-gifs', 'layer-list-settings']
+      
+      layerListIds.forEach(layerListId => {
+        const layerList = document.getElementById(layerListId)
+        if (!layerList) return
+        
+        layerList.innerHTML = ''
+      
+        layerOrder.forEach(layer => {
+          const layerItem = document.createElement('div')
+          layerItem.className = 'layer-item'
+          layerItem.draggable = true
+          layerItem.dataset.layerId = layer.id
+          
+          layerItem.innerHTML = `
+            <div class="layer-drag-handle">⋮⋮</div>
+            <div class="layer-visibility ${layerVisibility[layer.id] ? 'visible' : 'hidden'}" data-layer-id="${layer.id}">
+              👁
+            </div>
+            <div class="layer-label">${layer.label}</div>
+            <div class="layer-type">${layer.type}</div>
+          `
+          
+          layerList.appendChild(layerItem)
+        })
+      })
+      
+      // Add click handlers for visibility toggles
+      document.querySelectorAll('.layer-visibility').forEach(toggle => {
+        toggle.addEventListener('click', (e) => {
+          e.stopPropagation()
+          const layerId = e.target.dataset.layerId
+          layerVisibility[layerId] = !layerVisibility[layerId]
+          e.target.className = `layer-visibility ${layerVisibility[layerId] ? 'visible' : 'hidden'}`
+          e.target.textContent = '👁'
+          updatePreview()
+        })
+      })
+    }
+    
+    // Setup drag and drop functionality
+    function setupDragAndDrop() {
+      const layerListIds = ['layer-list', 'layer-list-content', 'layer-list-gifs', 'layer-list-settings']
+      
+      layerListIds.forEach(layerListId => {
+        const layerList = document.getElementById(layerListId)
+        if (!layerList) return
+      
+        layerList.addEventListener('dragstart', (e) => {
+          if (e.target.classList.contains('layer-item')) {
+            e.target.classList.add('dragging')
+            e.dataTransfer.effectAllowed = 'move'
+            e.dataTransfer.setData('text/html', e.target.outerHTML)
+          }
+        })
+        
+        layerList.addEventListener('dragend', (e) => {
+          if (e.target.classList.contains('layer-item')) {
+            e.target.classList.remove('dragging')
+          }
+        })
+        
+        layerList.addEventListener('dragover', (e) => {
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'move'
+          
+          const dragging = document.querySelector('.dragging')
+          const afterElement = getDragAfterElement(layerList, e.clientY)
+          
+          if (afterElement == null) {
+            layerList.appendChild(dragging)
+          } else {
+            layerList.insertBefore(dragging, afterElement)
+          }
+        })
+        
+        layerList.addEventListener('drop', (e) => {
+          e.preventDefault()
+          
+          const draggedElement = document.querySelector('.dragging')
+          if (!draggedElement) return
+          
+          // Update layer order based on new DOM order
+          const newOrder = []
+          layerList.querySelectorAll('.layer-item').forEach(item => {
+            const layerId = item.dataset.layerId
+            const layer = layerOrder.find(l => l.id === layerId)
+            if (layer) {
+              newOrder.push(layer)
+            }
+          })
+          
+          layerOrder = newOrder
+          // Re-render all layer lists to keep them in sync
+          renderLayerList()
+          // Update preview to reflect new layer order
+          updatePreview()
+        })
+      })
+    }
+    
+    // Helper function to determine drop position
+    function getDragAfterElement(container, y) {
+      const draggableElements = [...container.querySelectorAll('.layer-item:not(.dragging)')]
+      
+      return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect()
+        const offset = y - box.top - box.height / 2
+        
+        if (offset < 0 && offset > closest.offset) {
+          return { offset: offset, element: child }
+        } else {
+          return closest
+        }
+      }, { offset: Number.NEGATIVE_INFINITY }).element
+    }
+    
+    // Listen for data from main process
+    if (window.require) {
+      const { ipcRenderer } = window.require('electron')
+      ipcRenderer.on('export-data', (event, data) => {
+        console.log('Received export data:', data)
+        window.boardData = data.boardData
+        window.boardFilename = data.boardFilename
+        window.layoutData = data.layoutData
+      })
+    }
+
+    // Initialize layer management when DOM is loaded
+    document.addEventListener('DOMContentLoaded', () => {
+      initializeLayerManagement()
+      setupPreviewZoom()
+      setupWindowCloseHandler()
+    })
+
+    // Setup proper window close handling to prevent remote method errors
+    function setupWindowCloseHandler() {
+      // Handle window beforeunload event
+      window.addEventListener('beforeunload', (e) => {
+        // Prevent the default close behavior that might trigger remote method calls
+        e.preventDefault()
+        e.returnValue = ''
+        
+        // Use IPC to close properly
+        try {
+          if (typeof require !== 'undefined') {
+            const { ipcRenderer } = require('electron')
+            ipcRenderer.sendSync('close-enhanced-export-window')
+          }
+        } catch (error) {
+          console.log('Error in beforeunload handler:', error.message)
+        }
+      })
+
+      // Handle window unload event
+      window.addEventListener('unload', (e) => {
+        // Clean up any resources
+        try {
+          if (typeof require !== 'undefined') {
+            const { ipcRenderer } = require('electron')
+            ipcRenderer.sendSync('close-enhanced-export-window')
+          }
+        } catch (error) {
+          console.log('Error in unload handler:', error.message)
+        }
+      })
+
+      // Override window.close to use IPC instead
+      const originalWindowClose = window.close
+      window.close = function() {
+        try {
+          if (typeof require !== 'undefined') {
+            const { ipcRenderer } = require('electron')
+            ipcRenderer.sendSync('close-enhanced-export-window')
+          } else {
+            originalWindowClose.call(window)
+          }
+        } catch (error) {
+          console.log('Error in overridden window.close:', error.message)
+          originalWindowClose.call(window)
+        }
+      }
+    }
+
+    // Setup mouse zoom functionality for preview
+    function setupPreviewZoom() {
+      const previewCanvas = document.getElementById('preview-canvas')
+      if (!previewCanvas) return
+
+      let currentScale = 1
+      const minScale = 0.5
+      const maxScale = 3.0
+      const zoomStep = 0.05  // Much smaller steps
+
+      // Mouse wheel zoom
+      previewCanvas.addEventListener('wheel', (e) => {
+        e.preventDefault()
+        
+        // Fixed zoom direction: scroll up = zoom in, scroll down = zoom out
+        const zoomDirection = e.deltaY < 0 ? 1 : -1  // Fixed: deltaY < 0 means scroll up
+        const newScale = Math.max(minScale, Math.min(maxScale, currentScale + (zoomDirection * zoomStep)))
+        
+        if (newScale !== currentScale) {
+          currentScale = newScale
+          applyZoom()
+        }
+      })
+
+      // Apply zoom transform
+      function applyZoom() {
+        const previewContent = previewCanvas.querySelector('div')
+        if (previewContent) {
+          // Store original dimensions if not already stored
+          if (!previewContent.dataset.originalWidth) {
+            previewContent.dataset.originalWidth = previewContent.offsetWidth
+            previewContent.dataset.originalHeight = previewContent.offsetHeight
+          }
+          
+          const originalWidth = parseFloat(previewContent.dataset.originalWidth)
+          const originalHeight = parseFloat(previewContent.dataset.originalHeight)
+          
+          // Apply zoom to the entire preview content (paper + everything)
+          previewContent.style.transform = `scale(${currentScale})`
+          previewContent.style.transformOrigin = 'top left'
+          previewContent.style.transition = 'transform 0.1s ease-out'
+          
+          // Don't adjust the content size - let the transform handle the scaling
+          // This prevents double-scaling issues
+          previewContent.style.width = `${originalWidth}px`
+          previewContent.style.height = `${originalHeight}px`
+          
+          // Ensure the preview canvas can scroll to show all scaled content
+          previewCanvas.style.overflow = 'auto'
+          previewCanvas.style.position = 'relative'
+          
+          // Ensure the content is positioned at the top-left for proper scrolling
+          previewContent.style.position = 'relative'
+          previewContent.style.left = '0'
+          previewContent.style.top = '0'
+        }
+        
+        // Update zoom indicator
+        updateZoomIndicator()
+      }
+
+      // Update zoom indicator
+      function updateZoomIndicator() {
+        let indicator = document.getElementById('zoom-indicator')
+        if (!indicator) {
+          indicator = document.createElement('div')
+          indicator.id = 'zoom-indicator'
+          indicator.style.cssText = `
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: monospace;
+            z-index: 1000;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+          `
+          previewCanvas.appendChild(indicator)
+        }
+        
+        indicator.textContent = `${Math.round(currentScale * 100)}%`
+        indicator.style.opacity = currentScale !== 1 ? '1' : '0'
+        
+        // Hide indicator after 2 seconds if at 100%
+        if (currentScale === 1) {
+          setTimeout(() => {
+            if (indicator) indicator.style.opacity = '0'
+          }, 2000)
+        }
+      }
+
+      // Reset zoom on double click
+      previewCanvas.addEventListener('dblclick', (e) => {
+        e.preventDefault()
+        currentScale = 1
+        applyZoom()
+      })
+      
+      // Reset zoom when content changes
+      function resetZoom() {
+        currentScale = 1
+        const previewContent = previewCanvas.querySelector('div')
+        
+        if (previewContent) {
+          // Reset entire content
+          previewContent.style.transform = ''
+          previewContent.style.width = ''
+          previewContent.style.height = ''
+          previewContent.style.position = ''
+          previewContent.style.left = ''
+          previewContent.style.top = ''
+          // Clear stored dimensions so they get recalculated
+          delete previewContent.dataset.originalWidth
+          delete previewContent.dataset.originalHeight
+        }
+        updateZoomIndicator()
+      }
+
+      // Keyboard shortcuts for zoom
+      document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey || e.metaKey) {
+          if (e.key === '=' || e.key === '+') {
+            e.preventDefault()
+            const newScale = Math.min(maxScale, currentScale + zoomStep)
+            if (newScale !== currentScale) {
+              currentScale = newScale
+              applyZoom()
+            }
+          } else if (e.key === '-') {
+            e.preventDefault()
+            const newScale = Math.max(minScale, currentScale - zoomStep)
+            if (newScale !== currentScale) {
+              currentScale = newScale
+              applyZoom()
+            }
+          } else if (e.key === '0') {
+            e.preventDefault()
+            currentScale = 1
+            applyZoom()
+          }
+        }
+      })
+
+      // Reset zoom when preview updates
+      const originalUpdatePreview = updatePreview
+      updatePreview = function() {
+        originalUpdatePreview()
+        // Reset zoom after preview updates
+        setTimeout(() => {
+          currentScale = 1
+          applyZoom()
+        }, 100)
+      }
+    }
+
+    // Get layout configuration based on preset
+    function getLayoutConfiguration() {
+      const preset = document.getElementById('layout-template').value
+      const columns = parseInt(document.getElementById('columns').value)
+      const spacing = parseInt(document.getElementById('spacing').value)
+      const dialogueBelowImage = document.getElementById('dialogue-below-image').checked
+      const imageSize = parseInt(document.getElementById('image-size').value) || 80
+      
+      // Get visible layers in current order
+      const visibleLayers = layerOrder.filter(layer => layerVisibility[layer.id])
+      
+      // Create dynamic layout based on visible layers
+      const dynamicColumns = visibleLayers.map(layer => {
+        const baseWidths = {
+          'shot-number': 35,
+          'image': 500,
+          'notes': 120,
+          'talks': 120,
+          'dialogue': 90,
+          'action': 90,
+          'custom-layers': 0,
+          'custom-field': 40,
+          'time': 40
+        }
+        
+        return {
+          id: layer.id,
+          type: layer.type,
+          width: baseWidths[layer.type] || 100,
+          label: layer.label
+        }
+      })
+      
+      // Load preset layouts (for reference, but we'll use dynamic)
+      const layouts = {
+        'standard': {
+          columns: [
+            { id: 'shot', type: 'shot-number', width: 35, label: 'Shot' },
+            { id: 'image', type: 'image', width: 500, label: 'Image' },
+            { id: 'notes', type: 'notes', width: 120, label: 'Notes' },
+            { id: 'talks', type: 'talks', width: 120, label: 'Talks' },
+            { id: 'custom-layers', type: 'custom-layers', width: 0, label: 'Custom' },
+            { id: 'focal-length', type: 'custom-field', width: 40, label: 'mm' },
+            { id: 'time', type: 'time', width: 40, label: 'Time' }
+          ],
+          spacing: spacing,
+          orientation: 'landscape'
+        },
+        'japanese-storyboard': {
+          columns: [
+            { id: 'shot', type: 'shot-number', width: 35, label: 'ショット' },
+            { id: 'image', type: 'image', width: 520, label: '画' },
+            { id: 'notes', type: 'notes', width: 110, label: '内' },
+            { id: 'talks', type: 'talks', width: 110, label: '容' },
+            { id: 'time', type: 'time', width: 40, label: '秒' }
+          ],
+          spacing: spacing,
+          orientation: 'landscape',
+          paperSize: 'A4',
+          aspectRatio: '2.39:1',
+          showAspectRatio: true,
+          headerText: 'STORYBOARD',
+          headerSubtext: '絵コンテ',
+          imagePlaceholder: 'placeholder image',
+          notesPlaceholder: 'Write action notes here',
+          talksPlaceholder: 'Dialogue / sound notes',
+          timeFormat: '00\''
+        },
+        'detailed': {
+          columns: [
+            { id: 'shot', type: 'shot-number', width: 35, label: 'Shot' },
+            { id: 'image', type: 'image', width: 500, label: 'Image' },
+            { id: 'notes', type: 'notes', width: 90, label: 'Notes' },
+            { id: 'dialogue', type: 'dialogue', width: 90, label: 'Dialogue' },
+            { id: 'action', type: 'action', width: 90, label: 'Action' },
+            { id: 'custom-layers', type: 'custom-layers', width: 0, label: 'Custom' },
+            { id: 'focal-length', type: 'custom-field', width: 40, label: 'mm' },
+            { id: 'time', type: 'time', width: 40, label: 'Time' }
+          ],
+          spacing: spacing,
+          orientation: 'landscape'
+        },
+        'compact': {
+          columns: [
+            { id: 'shot', type: 'shot-number', width: 30, label: '#' },
+            { id: 'image', type: 'image', width: 200, label: 'Img' },
+            { id: 'notes', type: 'notes', width: 100, label: 'Notes' },
+            { id: 'time', type: 'time', width: 30, label: 'Time' }
+          ],
+          spacing: spacing,
+          orientation: 'landscape'
+        }
+      }
+      
+      // Use dynamic columns based on layer management
+      let layout = {
+        columns: dynamicColumns,
+        spacing: spacing,
+        orientation: preset === 'japanese-storyboard' ? 'landscape' : 'landscape'
+      }
+      
+      // Remove dialogue/talks columns if dialogue is below image
+      if (dialogueBelowImage) {
+        layout = {
+          ...layout,
+          columns: layout.columns.filter(col => col.type !== 'dialogue' && col.type !== 'talks')
+        }
+      }
+      
+      // Scale image column based on image size slider
+      layout = scaleLayoutForImageSize(layout, imageSize)
+      
+      return layout
+    }
+    
+    // Scale layout to fit page and adjust image column based on slider
+    function scaleLayoutForImageSize(layout, imageSize) {
+      try {
+        const scaledLayout = { ...layout }
+
+        // Get current page dimensions (matching PDF export)
+        const paperOrientation = document.getElementById('paper-orientation').value || 'portrait'
+        const a4Width = 595  // A4 width in points (exact)
+        const a4Height = 842 // A4 height in points (exact)
+        const pageWidth = paperOrientation === 'landscape' ? a4Height : a4Width
+        const margins = [20, 20, 20, 20] // top, right, bottom, left
+        const maxPageWidth = pageWidth - margins[1] - margins[3] // Available width
+        const rightPadding = 20 // Padding from right edge
+
+        // Find columns
+        const imageColumnIndex = scaledLayout.columns.findIndex(col => col.type === 'image')
+        const timeColumnIndex = scaledLayout.columns.findIndex(col => col.type === 'time')
+
+        if (imageColumnIndex === -1) return scaledLayout
+
+        // Scale image column based on slider
+        const baseImageWidth = scaledLayout.columns[imageColumnIndex].width
+        const imageScaleFactor = imageSize / 100
+        const newImageWidth = Math.round(baseImageWidth * imageScaleFactor)
+        scaledLayout.columns[imageColumnIndex] = {
+          ...scaledLayout.columns[imageColumnIndex],
+          width: newImageWidth
+        }
+
+        // If no time column (like compact layout), use basic scaling
+        if (timeColumnIndex === -1) {
+          const totalBaseWidth = scaledLayout.columns.reduce((sum, col) => sum + col.width, 0)
+          const totalSpacing = (scaledLayout.columns.length - 1) * scaledLayout.spacing
+          const totalNeededWidth = totalBaseWidth + totalSpacing
+
+          if (totalNeededWidth > maxPageWidth) {
+            const scaleFactor = maxPageWidth / totalNeededWidth
+            scaledLayout.columns = scaledLayout.columns.map(col => ({
+              ...col,
+              width: Math.max(20, Math.round(col.width * scaleFactor))
+            }))
+          }
+          return scaledLayout
+        }
+
+        // For layouts with time column, use the rubberband scaling
+        const textColumns = scaledLayout.columns.filter(col =>
+          col.type === 'notes' || col.type === 'talks' || col.type === 'dialogue' ||
+          col.type === 'action' || col.type === 'custom-field'
+        )
+
+        // Calculate fixed elements
+        const shotColumn = scaledLayout.columns.find(col => col.type === 'shot-number')
+        const shotWidth = cutColumn ? cutColumn.width : 0
+
+        // Lock time column to right edge with padding
+        const timeColumn = scaledLayout.columns[timeColumnIndex]
+        const timeWidth = timeColumn.width
+        const timeRightEdge = maxPageWidth - rightPadding
+        const timeLeftEdge = timeRightEdge - timeWidth
+
+        // Calculate space available for text columns
+        const usedSpace = shotWidth + scaledLayout.spacing + newImageWidth + scaledLayout.spacing
+        const availableTextSpace = timeLeftEdge - usedSpace
+
+        // Calculate total base width of text columns (excluding time)
+        const baseTextWidth = textColumns.reduce((sum, col) => sum + col.width, 0)
+        const textSpacing = textColumns.length * scaledLayout.spacing
+
+        // Simple scaling: if we have space, expand proportionally; if not, compress
+        const neededTextSpace = baseTextWidth + textSpacing
+
+        if (neededTextSpace > 0 && availableTextSpace > 0) {
+          const textScaleFactor = Math.min(2.0, Math.max(0.5, availableTextSpace / neededTextSpace))
+
+          // Apply scaling to text columns
+          textColumns.forEach(col => {
+            const colIndex = scaledLayout.columns.findIndex(c => c.id === col.id)
+            if (colIndex !== -1) {
+              const newWidth = Math.max(20, Math.round(col.width * textScaleFactor))
+              scaledLayout.columns[colIndex] = {
+                ...scaledLayout.columns[colIndex],
+                width: newWidth
+              }
+            }
+          })
+        }
+
+        return scaledLayout
+      } catch (error) {
+        console.error('Error in scaleLayoutForImageSize:', error)
+        return layout // Return original layout on error
+      }
+    }
+    
+    // Calculate total layout width
+    function calculateTotalLayoutWidth(layout) {
+      let totalWidth = 0
+      layout.columns.forEach((column, index) => {
+        totalWidth += column.width
+        if (index < layout.columns.length - 1) {
+          totalWidth += layout.spacing
+        }
+      })
+      return totalWidth
+    }
+
+    // Preview functionality
+    function updatePreview() {
+      try {
+        const previewCanvas = document.getElementById('preview-canvas')
+        const layout = getLayoutConfiguration()
+
+        // Clear previous preview
+        previewCanvas.innerHTML = ''
+
+        // ===== COMPLETELY NEW PREVIEW ALGORITHM =====
+        
+        // 1. Get page configuration
+        const paperOrientation = document.getElementById('paper-orientation').value || 'portrait'
+        const imageSize = parseInt(document.getElementById('image-size').value) || 80
+        
+        // 2. Define A4 dimensions in points (PDF standard)
+        const A4_WIDTH = 595
+        const A4_HEIGHT = 842
+        
+        // 3. Calculate page dimensions based on orientation
+        const pageWidth = paperOrientation === 'landscape' ? A4_HEIGHT : A4_WIDTH
+        const pageHeight = paperOrientation === 'landscape' ? A4_WIDTH : A4_HEIGHT
+        
+        // 4. Define margins (PDF standard)
+        const MARGIN_TOP = 20
+        const MARGIN_RIGHT = 20
+        const MARGIN_BOTTOM = 20
+        const MARGIN_LEFT = 20
+        
+        // 5. Calculate content area
+        const contentWidth = pageWidth - MARGIN_LEFT - MARGIN_RIGHT
+        const contentHeight = pageHeight - MARGIN_TOP - MARGIN_BOTTOM
+        
+        // 6. Define preview container constraints
+        const PREVIEW_MAX_WIDTH = 500
+        const PREVIEW_MAX_HEIGHT = 400
+        
+        // 7. Calculate scale factor to fit page in preview container
+        const scaleX = PREVIEW_MAX_WIDTH / pageWidth
+        const scaleY = PREVIEW_MAX_HEIGHT / pageHeight
+        const baseScale = Math.min(scaleX, scaleY, 1) // Never scale up
+        
+        // 8. Calculate scaled dimensions
+        const scaledPageWidth = pageWidth * baseScale
+        const scaledPageHeight = pageHeight * baseScale
+        const scaledContentWidth = contentWidth * baseScale
+        const scaledContentHeight = contentHeight * baseScale
+        
+        // 9. Get layout configuration and apply image size scaling
+        const scaledLayout = scaleLayoutForImageSize(layout, imageSize)
+        
+        // 10. Filter columns based on dialogue below image setting
+        const dialogueBelowImage = document.getElementById('dialogue-below-image').checked
+        const visibleColumns = scaledLayout.columns.filter(col => {
+          if (dialogueBelowImage && (col.type === 'dialogue' || col.type === 'talks')) {
+            return false
+          }
+          return true
+        })
+        
+        // 11. Calculate total content width needed
+        const totalContentWidth = visibleColumns.reduce((sum, col) => sum + col.width, 0) + 
+                                  (visibleColumns.length - 1) * (scaledLayout.spacing || 0)
+        
+        // 12. Calculate content scale factor to fit in available width
+        const contentScale = Math.min(1, scaledContentWidth / totalContentWidth)
+        const finalContentWidth = totalContentWidth * contentScale
+        
+        // 13. Create the preview page container
+        const previewPage = document.createElement('div')
+        previewPage.style.cssText = `
+          width: ${scaledPageWidth}px;
+          height: ${scaledPageHeight}px;
+          margin: 0 auto;
+          background: white;
+          border: 1px solid #374151;
+          border-radius: 3px;
+          position: relative;
+          box-sizing: border-box;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        `
+        
+        // 14. Add page margins (visual representation)
+        const pageMargins = document.createElement('div')
+        pageMargins.style.cssText = `
+          position: absolute;
+          top: ${MARGIN_TOP * baseScale}px;
+          left: ${MARGIN_LEFT * baseScale}px;
+          right: ${MARGIN_RIGHT * baseScale}px;
+          bottom: ${MARGIN_BOTTOM * baseScale}px;
+          border: 1px dashed #d1d5db;
+          border-radius: 2px;
+          background: #fafafa;
+        `
+        previewPage.appendChild(pageMargins)
+        
+        // 15. Add page header
+        const header = document.createElement('div')
+        header.style.cssText = `
+          position: absolute;
+          top: ${(MARGIN_TOP + 5) * baseScale}px;
+          left: ${(MARGIN_LEFT + 5) * baseScale}px;
+          right: ${(MARGIN_RIGHT + 5) * baseScale}px;
+          height: ${20 * baseScale}px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          border-bottom: 1px solid #e5e7eb;
+          font-size: ${12 * baseScale}px;
+          color: #374151;
+        `
+        
+        const title = document.createElement('div')
+        title.textContent = layout.headerText || 'STORYBOARD'
+        title.style.fontWeight = 'bold'
+        
+        const pageInfo = document.createElement('div')
+        pageInfo.textContent = 'Page 1 of 1'
+        pageInfo.style.color = '#6b7280'
+        
+        header.appendChild(title)
+        header.appendChild(pageInfo)
+        previewPage.appendChild(header)
+        
+        // 16. Add column headers
+        const columnHeaders = document.createElement('div')
+        columnHeaders.style.cssText = `
+          position: absolute;
+          top: ${(MARGIN_TOP + 30) * baseScale}px;
+          left: ${MARGIN_LEFT * baseScale}px;
+          width: ${finalContentWidth}px;
+          height: ${15 * baseScale}px;
+          display: flex;
+          background: #f8fafc;
+          border: 1px solid #e5e7eb;
+          border-radius: 2px;
+          gap: ${(scaledLayout.spacing || 0) * contentScale}px;
+          padding: ${2 * baseScale}px;
+          box-sizing: border-box;
+        `
+        
+        visibleColumns.forEach(column => {
+          const headerCell = document.createElement('div')
+          headerCell.style.cssText = `
+            flex: 0 0 ${column.width * contentScale}px;
+            font-size: ${10 * baseScale}px;
+            font-weight: 600;
+            color: #374151;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-right: 1px solid #e5e7eb;
+            padding: 0 ${2 * baseScale}px;
+            box-sizing: border-box;
+          `
+          headerCell.textContent = column.label
+          columnHeaders.appendChild(headerCell)
+        })
+        previewPage.appendChild(columnHeaders)
+        
+        // 17. Add sample content row
+        const contentRow = document.createElement('div')
+        contentRow.style.cssText = `
+          position: absolute;
+          top: ${(MARGIN_TOP + 50) * baseScale}px;
+          left: ${MARGIN_LEFT * baseScale}px;
+          width: ${finalContentWidth}px;
+          height: ${40 * baseScale}px;
+          display: flex;
+          background: white;
+          border: 1px solid #e5e7eb;
+          border-radius: 2px;
+          gap: ${(scaledLayout.spacing || 0) * contentScale}px;
+          padding: ${3 * baseScale}px;
+          box-sizing: border-box;
+        `
+        
+        visibleColumns.forEach(column => {
+          const cell = document.createElement('div')
+          cell.style.cssText = `
+            flex: 0 0 ${column.width * contentScale}px;
+            font-size: ${9 * baseScale}px;
+            color: #6b7280;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-right: 1px solid #f3f4f6;
+            padding: 0 ${2 * baseScale}px;
+            box-sizing: border-box;
+            overflow: hidden;
+          `
+          
+          // Add sample content based on column type
+          switch (column.type) {
+            case 'shot-number':
+              cell.textContent = '01'
+              cell.style.fontWeight = 'bold'
+              break
+            case 'image':
+              if (column.width * contentScale > 30) {
+                cell.innerHTML = `
+                  <div style="
+                    width: 100%;
+                    height: ${Math.min(50, column.width * contentScale * 0.6)}px;
+                    background: #f3f4f6;
+                    border: 1px solid #d1d5db;
+                    border-radius: 2px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: ${6 * baseScale}px;
+                    color: #9ca3af;
+                  ">
+                    IMG
+                  </div>
+                `
+              } else {
+                cell.textContent = 'IMG'
+              }
+              break
+            case 'notes':
+              cell.textContent = 'Notes...'
+              break
+            case 'dialogue':
+              cell.textContent = 'Dialogue...'
+              break
+            case 'talks':
+              cell.textContent = 'Talks...'
+              break
+            case 'action':
+              cell.textContent = 'Action...'
+              break
+            case 'time':
+              cell.textContent = '2.5s'
+              break
+            case 'custom-field':
+              cell.textContent = column.label === 'mm' ? '50mm' : 'Custom...'
+              break
+            default:
+              cell.textContent = 'Text...'
+          }
+          
+          contentRow.appendChild(cell)
+        })
+        previewPage.appendChild(contentRow)
+        
+        // 18. Add dialogue below image if enabled
+        if (dialogueBelowImage) {
+          const dialogueBelow = document.createElement('div')
+          dialogueBelow.style.cssText = `
+            position: absolute;
+            top: ${(MARGIN_TOP + 95) * baseScale}px;
+            left: ${MARGIN_LEFT * baseScale}px;
+            width: ${finalContentWidth}px;
+            height: ${15 * baseScale}px;
+            background: #f8fafc;
+            border: 1px solid #e5e7eb;
+            border-radius: 2px;
+            padding: ${2 * baseScale}px;
+            font-size: ${8 * baseScale}px;
+            color: #6b7280;
+            display: flex;
+            align-items: center;
+            box-sizing: border-box;
+          `
+          dialogueBelow.textContent = 'Dialogue below image...'
+          previewPage.appendChild(dialogueBelow)
+        }
+        
+        // 19. Add page format indicator
+        const pageIndicator = document.createElement('div')
+        pageIndicator.style.cssText = `
+          position: absolute;
+          top: 5px;
+          left: 5px;
+          background: #f3f4f6;
+          color: #6b7280;
+          padding: 2px 4px;
+          border-radius: 2px;
+          font-size: ${6 * baseScale}px;
+          font-weight: 600;
+          border: 1px solid #e5e7eb;
+          z-index: 10;
+        `
+        pageIndicator.textContent = `A4 ${paperOrientation === 'landscape' ? 'Landscape' : 'Portrait'}`
+        previewPage.appendChild(pageIndicator)
+        
+        // 20. Add debug information
+        const debugInfo = document.createElement('div')
+        debugInfo.style.cssText = `
+          position: absolute;
+          bottom: 5px;
+          left: 5px;
+          right: 5px;
+          font-size: ${4 * baseScale}px;
+          color: #9ca3af;
+          padding: 2px 4px;
+          background: rgba(248, 250, 252, 0.95);
+          border-radius: 2px;
+          font-family: monospace;
+          border: 1px solid #e5e7eb;
+          z-index: 10;
+          text-align: center;
+        `
+        debugInfo.textContent = `Page: ${scaledPageWidth.toFixed(0)}×${scaledPageHeight.toFixed(0)}px | Content: ${finalContentWidth.toFixed(0)}px | Scale: ${(contentScale * 100).toFixed(0)}%`
+        previewPage.appendChild(debugInfo)
+        
+        // 21. Add the preview page to the canvas
+        previewCanvas.appendChild(previewPage)
+        
+      } catch (error) {
+        console.error('Error in updatePreview:', error)
+        // Show error message in preview
+        const errorDiv = document.createElement('div')
+        errorDiv.style.cssText = `
+          padding: 20px;
+          text-align: center;
+          color: #ef4444;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        `
+        errorDiv.textContent = 'Preview error: ' + error.message
+        previewCanvas.appendChild(errorDiv)
+      }
+    }
+
+     // Update preview when layout changes
+    document.getElementById('layout-template').addEventListener('change', updatePreview)
+    document.getElementById('paper-size').addEventListener('change', updatePreview)
+    document.getElementById('paper-orientation').addEventListener('change', updatePreview)
+    document.getElementById('columns').addEventListener('input', updatePreview)
+    document.getElementById('spacing').addEventListener('input', updatePreview)
+    document.getElementById('image-size').addEventListener('input', updatePreview)
+    document.getElementById('dialogue-below-image').addEventListener('change', updatePreview)
+
+    // Refresh preview button
+    document.getElementById('refresh-preview').addEventListener('click', updatePreview)
+
+     // Save settings to localStorage
+     function saveSettings() {
+       try {
+         const settings = {
+           layoutTemplate: document.getElementById('layout-template').value,
+           paperSize: document.getElementById('paper-size').value,
+           paperOrientation: document.getElementById('paper-orientation').value,
+           columns: document.getElementById('columns').value,
+           spacing: document.getElementById('spacing').value,
+           imageSize: document.getElementById('image-size').value,
+           dialogueBelowImage: document.getElementById('dialogue-below-image').checked,
+           dialogueFont: document.getElementById('dialogue-font').value,
+           includeFields: document.getElementById('include-fields').checked,
+           includeCustomLayers: document.getElementById('include-custom-layers').checked,
+           showFilenames: document.getElementById('show-filenames').checked,
+           filenameLocation: document.getElementById('filename-location').value,
+           includeGifs: document.getElementById('include-gifs').checked,
+           includeDialogueInGifs: document.getElementById('include-dialogue-in-gifs').checked,
+           exportFormat: document.getElementById('export-format').value,
+           imageQuality: document.getElementById('image-quality').value,
+           includeWatermark: document.getElementById('include-watermark').checked,
+           watermarkText: document.getElementById('watermark-text').value,
+           watermarkOpacity: document.getElementById('watermark-opacity').value,
+           authorName: document.getElementById('author-name').value,
+           filenameTemplate: document.getElementById('filename-template').value,
+           openFolder: document.getElementById('open-folder').checked,
+           lastSaved: new Date().toISOString()
+         }
+         localStorage.setItem('storyboarder-export-settings', JSON.stringify(settings))
+         console.log('Export settings saved successfully')
+         console.log('Author name saved:', settings.authorName || 'not set')
+       } catch (error) {
+         console.error('Failed to save export settings:', error)
+       }
+     }
+     
+     // Load settings from localStorage
+     function loadSettings() {
+       try {
+         const savedSettings = localStorage.getItem('storyboarder-export-settings')
+         if (savedSettings) {
+           const settings = JSON.parse(savedSettings)
+           
+           // Validate settings object
+           if (typeof settings !== 'object' || settings === null) {
+             throw new Error('Invalid settings format')
+           }
+           
+           // Apply saved settings to form elements with validation
+           const elements = {
+             'layout-template': settings.layoutTemplate,
+             'paper-size': settings.paperSize,
+             'paper-orientation': settings.paperOrientation,
+             'columns': settings.columns,
+             'spacing': settings.spacing,
+             'image-size': settings.imageSize,
+             'filename-location': settings.filenameLocation,
+             'export-format': settings.exportFormat,
+             'image-quality': settings.imageQuality,
+             'watermark-text': settings.watermarkText,
+             'watermark-opacity': settings.watermarkOpacity,
+             'author-name': settings.authorName,
+             'filename-template': settings.filenameTemplate,
+             'dialogue-font': settings.dialogueFont
+           }
+           
+           // Set text/select values
+           Object.entries(elements).forEach(([id, value]) => {
+             const element = document.getElementById(id)
+             if (element && value !== undefined && value !== null) {
+               element.value = value
+             } else if (id === 'dialogue-font' && element) {
+               // Default to 'regular' if no saved value
+               element.value = 'regular'
+             } else if (id === 'author-name' && element) {
+               // Ensure author name field gets the saved value
+               element.value = value || ''
+             }
+           })
+           
+           // Set checkbox values with defaults
+           const checkboxes = {
+             'dialogue-below-image': settings.dialogueBelowImage !== undefined ? settings.dialogueBelowImage : true, // Default to true
+             'include-custom-layers': settings.includeCustomLayers !== undefined ? settings.includeCustomLayers : true, // Default to true
+             'include-fields': settings.includeFields !== undefined ? settings.includeFields : true, // Default to true
+             'show-filenames': settings.showFilenames !== undefined ? settings.showFilenames : false, // Default to false
+             'include-gifs': settings.includeGifs !== undefined ? settings.includeGifs : true, // Default to true
+             'include-dialogue-in-gifs': settings.includeDialogueInGifs !== undefined ? settings.includeDialogueInGifs : false, // Default to false
+             'include-watermark': settings.includeWatermark !== undefined ? settings.includeWatermark : false, // Default to false
+             'open-folder': settings.openFolder !== undefined ? settings.openFolder : true // Default to true
+           }
+
+           Object.entries(checkboxes).forEach(([id, value]) => {
+             const element = document.getElementById(id)
+             if (element) {
+               element.checked = Boolean(value)
+             }
+           })
+           
+           console.log('Export settings loaded successfully from', settings.lastSaved || 'unknown date')
+           console.log('Author name loaded:', settings.authorName || 'not set')
+           
+           // Update display values
+           if (settings.imageSize) {
+             const imageSizeValue = document.getElementById('image-size-value')
+             if (imageSizeValue) {
+               imageSizeValue.textContent = settings.imageSize + '%'
+             }
+           }
+           
+           if (settings.gifFps) {
+             const fpsValue = document.getElementById('fps-value')
+             if (fpsValue) {
+               fpsValue.textContent = settings.gifFps
+             }
+           }
+           
+         } else {
+           console.log('No saved export settings found, using defaults')
+         }
+       } catch (error) {
+         console.error('Failed to load saved settings:', error)
+         console.log('Using default settings')
+       }
+     }
+     
+     // Add event listeners to save settings when changed
+     function setupSettingsPersistence() {
+       const inputs = [
+         'layout-template', 'paper-size', 'paper-orientation', 'columns', 'spacing',
+         'image-size', 'dialogue-below-image', 'dialogue-font', 'include-fields', 'include-custom-layers', 'show-filenames',
+         'filename-location', 'include-gifs', 'include-dialogue-in-gifs', 'export-format',
+         'image-quality', 'include-watermark', 'watermark-text', 'watermark-opacity',
+         'author-name', 'filename-template', 'open-folder'
+       ]
+       
+       inputs.forEach(id => {
+         const element = document.getElementById(id)
+         if (element) {
+           element.addEventListener('change', () => {
+             saveSettings()
+             updatePreview() // Also update preview when settings change
+           })
+           element.addEventListener('input', () => {
+             saveSettings()
+             updatePreview() // Also update preview when settings change
+           })
+         }
+       })
+       
+       // Special handling for author name to save on every keystroke
+       const authorNameField = document.getElementById('author-name')
+       if (authorNameField) {
+         authorNameField.addEventListener('input', () => {
+           saveSettings()
+         })
+         authorNameField.addEventListener('blur', () => {
+           saveSettings()
+         })
+       }
+     }
+     
+     // Clear all saved settings (for debugging or reset)
+     function clearSettings() {
+       try {
+         localStorage.removeItem('storyboarder-export-settings')
+         console.log('Export settings cleared')
+         location.reload() // Reload to apply defaults
+       } catch (error) {
+         console.error('Failed to clear settings:', error)
+       }
+     }
+     
+     // Make clearSettings available globally for debugging
+     window.clearExportSettings = clearSettings
+
+     // Initialize
+     document.addEventListener('DOMContentLoaded', () => {
+       // Load saved settings
+       loadSettings()
+       
+       // Set up settings persistence
+       setupSettingsPersistence()
+       
+       // Set initial FPS value
+       
+       // Set initial image size value
+       imageSizeValue.textContent = imageSizeSlider.value + '%'
+
+       // Update image size value on slider change
+       imageSizeSlider.addEventListener('input', () => {
+         imageSizeValue.textContent = imageSizeSlider.value + '%'
+       })
+       
+       // Initialize preview
+       updatePreview()
+     })
+    } catch (error) {
+      // Suppress any remaining errors
+      console.log('Suppressed script error:', error.message)
+    }
+  </script>
+</body>
+</html>

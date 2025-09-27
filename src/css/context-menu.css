@@ -22,11 +22,13 @@
 
 #context-menu {
   position: relative;
-  background: rgba(20,20,20,1);
-  color: white;
-  padding: 10px;
+  background: #2c2c2e;
+  color: #ffffff;
+  padding: 8px;
   border-radius: 8px;
+  border: 1px solid #3a3a3c;
   max-width: 300px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   
   transform-origin: 50% 100%;
 
@@ -97,9 +99,11 @@
 }
 
 #context-menu .item {
-  color: rgba(255,255,255,0.5);
-  padding: 5px 10px;
-  border-radius: 3px;
+  color: #ffffff;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: background-color 0.2s ease;
 }
 
 #context-menu .hr {
@@ -109,7 +113,7 @@
 
 
 #context-menu .item:hover {
-  background-color: rgba(255,255,255,0.2);
+  background-color: #3a3a3c;
 }
 
 

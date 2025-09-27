@@ -1,13 +1,13 @@
 body {
   margin: 0;
   padding: 0;
-  color: black;
-  font-family: var(--default-font-stack);
-  font-weight: 300;
-  background: #333333;
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-weight: 400;
+  background: #1c1c1e;
   user-select: none;
   -webkit-user-select: none;
-  cursor:default;
+  cursor: default;
   display: flex;
   flex-direction: row;
   min-height: 100vh;
@@ -29,10 +29,10 @@ body {
   display: none;
   overflow: scroll;
   height: 100vh;
-  box-shadow: 0px 0px 2px rgba(0,0,0,0.3);
+  box-shadow: 2px 0 8px rgba(0,0,0,0.2);
   z-index: 999;
-  background: #333;
-
+  background: #2c2c2e;
+  border-right: 1px solid #3a3a3c;
 }
 
 body::-webkit-scrollbar {
@@ -94,12 +94,12 @@ body::-webkit-scrollbar {
 
 #scenes .section {
   font-size: 10px;
-  background: #333;
+  background: #2c2c2e;
   font-weight: 700;
 }
 
 #script {
-  background: #444;
+  background: #2c2c2e;
   width: 200px;
   display: none;
   overflow: scroll;
@@ -378,6 +378,7 @@ body::-webkit-scrollbar {
   position: relative;
   width: 350px;
   max-height: 100%;
+  background: #2c2c2e;
   /* transition: 0.3s width; */
 }
 
@@ -498,6 +499,230 @@ body::-webkit-scrollbar {
   display: none;
 }
 
+/* Custom Layers Styles */
+.custom-layers-section {
+  margin: 15px 0;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.custom-layers-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.custom-layers-header span {
+  color: #ccc;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.add-layer-btn {
+  background: #4a90e2;
+  border: none;
+  border-radius: 3px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.add-layer-btn:hover {
+  background: #357abd;
+}
+
+.add-layer-btn svg {
+  width: 12px;
+  height: 12px;
+  fill: white;
+}
+
+.custom-layers-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.custom-layer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.custom-layer-label {
+  flex: 0 0 80px;
+  color: #ccc;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.custom-layer-input {
+  flex: 1;
+  border: 0;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 12px;
+  padding: 4px 6px;
+  min-width: 0;
+}
+
+.custom-layer-input:focus {
+  background: rgba(255, 255, 255, 0.15);
+  outline: none;
+}
+
+.custom-layer-remove {
+  background: #e74c3c;
+  border: none;
+  border-radius: 2px;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 10px;
+  color: white;
+  transition: background 0.2s;
+}
+
+.custom-layer-remove:hover {
+  background: #c0392b;
+}
+
+/* Input Dialog Styles for Custom Layers */
+.input-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20000;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.input-dialog-container {
+  background: #2a2a2a;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  width: 100%;
+  max-width: 400px;
+  overflow: hidden;
+  border: 1px solid #444;
+}
+
+.input-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #444;
+  background: #333;
+}
+
+.input-dialog-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.input-dialog-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #ccc;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.input-dialog-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.input-dialog-content {
+  padding: 20px;
+}
+
+.input-dialog-content p {
+  margin: 0 0 16px 0;
+  color: #ccc;
+  font-size: 14px;
+}
+
+.input-dialog-content input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #555;
+  border-radius: 4px;
+  background: #444;
+  color: #fff;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.input-dialog-content input:focus {
+  outline: none;
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
+}
+
+.input-dialog-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding: 16px 20px;
+  border-top: 1px solid #444;
+  background: #333;
+}
+
+.input-dialog-actions button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.input-dialog-actions .btn-secondary {
+  background: #666;
+  color: #fff;
+}
+
+.input-dialog-actions .btn-secondary:hover {
+  background: #777;
+}
+
+.input-dialog-actions .btn-primary {
+  background: #4a90e2;
+  color: #fff;
+}
+
+.input-dialog-actions .btn-primary:hover {
+  background: #357abd;
+}
+
 .board-metadata-container label {
   position: relative;
 
@@ -589,9 +814,15 @@ textarea:focus, input:focus {
 #board-metadata input[type="checkbox"] + label.disabled {
   opacity: 0.25;
   cursor: default;
+  background: #3a3a3c;
+  color: #8e8e93;
 }
 #board-metadata input[type="checkbox"] + label.disabled span {
   cursor: default;
+}
+#board-metadata input[type="checkbox"] + label.disabled {
+  color: #8e8e93;
+  opacity: 0.5;
 }
 
 /*
@@ -638,8 +869,10 @@ https://icomoon.io/app/#/select
   align-items: center;
   align-content: center;
   justify-content: center;
-  margin-top: 15px;
+  margin-top: 0;
   color: #fff;
+  background: #1c1c1e;
+  border-top: 1px solid #3a3a3c;
 }
 
 .timeline__time_block,
@@ -664,15 +897,15 @@ https://icomoon.io/app/#/select
 }
 
 #timeline #movie-timeline-content div {
-  background: rgba(255,255,255,0.1);
+  background: #2c2c2e;
   display: block;
   font-size: 1px;
   height: 100%;
-  box-shadow: 0 1px 0 rgba(0,0,0,0.3);
+  border-radius: 2px;
 }
 
 #timeline #movie-timeline-content div:nth-child(even) {
-    background: rgba(255,255,255,0.2);
+    background: #3a3a3c;
 }
 
 #timeline #movie-timeline-content div:nth-child(2) {
@@ -1003,4 +1236,115 @@ input[type=range]:focus::-webkit-slider-runnable-track {
 #shot-generator-container .shot-generator-layer-thumbnail * {
   -webkit-user-drag: none;
   user-drag: none;
+}
+
+/* Insertion Point Divider */
+.insertion-divider {
+  position: relative;
+  display: inline-block;
+  width: 12px;
+  height: 100px; /* Match thumbnail height */
+  vertical-align: top;
+  z-index: 1000;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  margin: 0 2px; /* Small margin between boards */
+}
+
+.insertion-divider.show {
+  opacity: 1;
+}
+
+.insertion-divider::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, #3b82f6, #1d4ed8);
+  transform: translateX(-50%);
+  border-radius: 1px;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+}
+
+/* Left drop zone (join group) */
+.insertion-divider .drop-zone-left {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background: linear-gradient(to bottom, #10b981, #059669);
+  border-radius: 2px 0 0 2px;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.insertion-divider .drop-zone-left:hover {
+  opacity: 1;
+}
+
+/* Right drop zone (leave group) */
+.insertion-divider .drop-zone-right {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background: linear-gradient(to bottom, #ef4444, #dc2626);
+  border-radius: 0 2px 2px 0;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.insertion-divider .drop-zone-right:hover {
+  opacity: 1;
+}
+
+/* Drop zone hints */
+.drop-zone-hint {
+  position: absolute;
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  z-index: 1001;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  font-weight: 500;
+}
+
+.drop-zone-hint.show {
+  opacity: 1;
+}
+
+.drop-zone-hint.left {
+  left: 25%;
+  transform: translateX(-50%);
+}
+
+.drop-zone-hint.right {
+  left: 75%;
+  transform: translateX(-50%);
+}
+
+/* Center hint for precise insertion */
+.drop-zone-hint.center {
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(59, 130, 246, 0.9);
 }

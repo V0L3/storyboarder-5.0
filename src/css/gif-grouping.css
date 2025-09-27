@@ -1,32 +1,38 @@
-/* GIF Grouping Styles */
+/* Enhanced GIF Grouping Styles */
 
 /* Grouping Mode Styles */
 .gif-grouping-mode {
   cursor: crosshair;
 }
 
-.gif-grouping-mode .thumbnail {
+.gif-grouping-mode .thumbnail,
+.gif-grouping-mode .t-scene {
   cursor: pointer;
   position: relative;
   border: 2px solid transparent;
   transition: all 0.2s ease;
+  border-radius: 8px;
 }
 
-.gif-grouping-mode .thumbnail:hover {
-  border-color: #4CAF50;
-  transform: scale(1.05);
+.gif-grouping-mode .thumbnail:hover,
+.gif-grouping-mode .t-scene:hover {
+  border-color: #3b82f6;
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
 }
 
-.thumbnail.gif-selected {
-  border-color: #4CAF50 !important;
-  box-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+.thumbnail.gif-selected,
+.t-scene.gif-selected {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+  background: rgba(59, 130, 246, 0.05);
 }
 
 .gif-selection-indicator {
   position: absolute;
   top: 5px;
   left: 5px;
-  background: #4CAF50;
+  background: #3b82f6;
   color: white;
   width: 20px;
   height: 20px;
@@ -37,6 +43,8 @@
   font-size: 12px;
   font-weight: bold;
   z-index: 10;
+  border: 2px solid white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 /* Group Indicators in Timeline */

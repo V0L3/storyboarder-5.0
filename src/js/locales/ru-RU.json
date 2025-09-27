@@ -37,6 +37,7 @@
 			"export-project-as-zip": "Экспортировать проект в ZIP",
 			"clean-up-scene": "Очистить сцену…",
 			"print-pdf": "Распечатать или Экспортировать в PDF…",
+			"enhanced-export": "Расширенный экспорт…",
 			"print-storyboarder-worksheet": "Распечатать Storyboarder worksheet…",
 			"import-worksheets": "Импортировать worksheets…",
 			"import-images-to-new-boards": "Импортировать изображения в новую доску…",
@@ -133,7 +134,7 @@
 		}
 	},
 	"welcome-window": {
-	  	"recentStoryboards": "Недавние Storyboards",
+	  	"recentStoryboards": "Недавние  Storyboards",
 	  	"new-storyboard": "Создать Новый Storyboard…",
 	  	"welcome-line-1": "Storyboarder просто позволяет визуально отбразить ваши истории как можно быстрее.",
 	  	"welcome-line-2": "Вы можете исползовать написанный рассказа, либо создайть совершенно новый файл. Создайте доску, рисуйте на ней, создайте доску, рисуйте на ней и наблюдайте за тем как ваша история оживает. Вы также можете распечатать рабочие листы, рисовать на них и легко импортировать обратно.",

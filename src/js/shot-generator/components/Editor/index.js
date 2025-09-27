@@ -19,6 +19,42 @@ import useComponentSize from './../../../hooks/use-component-size'
 
 import { Canvas } from 'react-three-fiber'
 
+// WebGL error handling
+const handleWebGLError = (error, setWebglError) => {
+  console.error('WebGL Error:', error)
+  if (setWebglError) {
+    setWebglError(true)
+  } else {
+    const errorMessage = document.createElement('div')
+    errorMessage.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #ff6b6b;
+      color: white;
+      padding: 20px;
+      border-radius: 8px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      z-index: 10000;
+      max-width: 400px;
+      text-align: center;
+    `
+    errorMessage.innerHTML = `
+      <h3>WebGL Rendering Error</h3>
+      <p>Shot Generator encountered a WebGL error. This may be due to graphics driver issues or insufficient GPU memory.</p>
+      <p><strong>Error:</strong> ${error.message || 'Unknown WebGL error'}</p>
+    `
+    document.body.appendChild(errorMessage)
+    
+    setTimeout(() => {
+      if (errorMessage.parentNode) {
+        errorMessage.parentNode.removeChild(errorMessage)
+      }
+    }, 10000)
+  }
+}
+
 import BonesHelper from '../../../xr/src/three/BonesHelper'
 import {
   getWorld,
@@ -147,6 +183,7 @@ const Editor = React.memo(({
   }, [largeCanvasSize.width, largeCanvasSize.height, aspectRatio])
 
   const [mainCanvasData, setMainCanvasData] = useState({})
+  const [webglError, setWebglError] = useState(false)
   const largeCanvasData = useRef({})
   const setLargeCanvasData = (camera, scene, gl) => {
     largeCanvasData.current.camera = camera
@@ -184,6 +221,50 @@ const Editor = React.memo(({
     [window.__dirname, storyboarderFilePath]
   )
 
+  // Show WebGL error fallback if needed
+  if (webglError) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        background: '#333',
+        color: '#fff',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        textAlign: 'center',
+        padding: '20px'
+      }}>
+        <div style={{ fontSize: '48px', marginBottom: '20px' }}>⚠️</div>
+        <h1 style={{ fontSize: '24px', marginBottom: '16px', color: '#ff6b6b' }}>WebGL Rendering Failed</h1>
+        <p style={{ fontSize: '16px', lineHeight: '1.5', maxWidth: '500px', marginBottom: '20px' }}>
+          Shot Generator failed to initialize WebGL rendering. This may be due to graphics driver issues or insufficient GPU memory.
+        </p>
+        <div style={{ background: '#444', padding: '16px', borderRadius: '8px', maxWidth: '600px', textAlign: 'left' }}>
+          <h3 style={{ marginTop: '0', color: '#4ecdc4' }}>Troubleshooting Steps:</h3>
+          <ul style={{ margin: '0', paddingLeft: '20px' }}>
+            <li>Update your graphics drivers to the latest version</li>
+            <li>Make sure hardware acceleration is enabled in your system settings</li>
+            <li>Try restarting Storyboarder</li>
+            <li>Close other applications that may be using GPU memory</li>
+          </ul>
+        </div>
+        <button onClick={() => window.close()} style={{
+          marginTop: '20px',
+          padding: '12px 24px',
+          background: '#4ecdc4',
+          color: '#333',
+          border: 'none',
+          borderRadius: '6px',
+          fontSize: '16px',
+          fontWeight: '600',
+          cursor: 'pointer'
+        }}>Close Window</button>
+      </div>
+    )
+  }
+
   return (
     <FilepathsContext.Provider value={filepathsState}>
       <FatalErrorBoundary key={board.uid}>
@@ -204,7 +285,22 @@ const Editor = React.memo(({
                   gl2={true}
                   orthographic={ true }
                   updateDefaultCamera={ false }
-                  noEvents={ true }>
+                  noEvents={ true }
+                  onCreated={({ gl }) => {
+                    // Add WebGL error handling
+                    gl.domElement.addEventListener('webglcontextlost', (event) => {
+                      event.preventDefault()
+                      handleWebGLError(new Error('WebGL context lost'), setWebglError)
+                    })
+                    gl.domElement.addEventListener('webglcontextrestored', () => {
+                      console.log('WebGL context restored')
+                      setWebglError(false)
+                    })
+                  }}
+                  onError={(error) => {
+                    console.error('Canvas creation error:', error)
+                    handleWebGLError(error, setWebglError)
+                  }}>
                   <Provider store={ store }>
                     <SceneManagerR3fSmall
                       renderData={ mainViewCamera === "live" ? null : largeCanvasData.current }
@@ -238,7 +334,22 @@ const Editor = React.memo(({
                     id="camera-canvas"
                     gl2={true}
                     updateDefaultCamera={ true }
-                    noEvents={ true }>
+                    noEvents={ true }
+                    onCreated={({ gl }) => {
+                      // Add WebGL error handling
+                      gl.domElement.addEventListener('webglcontextlost', (event) => {
+                        event.preventDefault()
+                        handleWebGLError(new Error('WebGL context lost'), setWebglError)
+                      })
+                      gl.domElement.addEventListener('webglcontextrestored', () => {
+                        console.log('WebGL context restored')
+                        setWebglError(false)
+                      })
+                    }}
+                    onError={(error) => {
+                      console.error('Canvas creation error:', error)
+                      handleWebGLError(error, setWebglError)
+                    }}>
                       <Provider store={ store }>
                         <FilepathsContext.Provider value={filepathsState}>
                           <SceneManagerR3fLarge

@@ -177,7 +177,11 @@ const generatePDF = (paperSize, layout='landscape', rows, cols, spacing, boardDa
 
           doc.font('thin')
           doc.fontSize(4)
-          doc.text(util.msToTime(boardData.boards[currentBoard].time), x+offset+imgSize[0]-40, y-6, {width: 40, align: 'right'})
+          // Ensure time text stays within the box boundaries with proper padding
+          let timeX = Math.min(x+offset+imgSize[0]-40, x+boxSize[0]-40)
+          // Additional safety check to ensure it doesn't exceed page boundaries
+          timeX = Math.min(timeX, documentSize[docwidthIdx] - margin[2] - 40)
+          doc.text(util.msToTime(boardData.boards[currentBoard].time), timeX, y-6, {width: 40, align: 'right'})
 
           let textOffset = ( boardData.boards[currentBoard].action || boardData.boards[currentBoard].dialogue ) ? 5 : 0
           let imgAligned = false

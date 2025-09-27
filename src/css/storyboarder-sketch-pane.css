@@ -3,6 +3,9 @@
   display: flex;
   flex-direction: row;
   height: 1px;
+  background: #1c1c1e;
+  border-radius: 0 0 8px 8px;
+  overflow: hidden;
 }
 
 #storyboarder-sketch-pane {
@@ -23,7 +26,8 @@
   position: relative;
   /* background: white; */
   /*border-radius: 13px;*/
-  box-shadow: 0 2px 15px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  border-radius: 8px;
   cursor: none;
 
   flex-shrink: 0;

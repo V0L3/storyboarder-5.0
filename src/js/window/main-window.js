@@ -249,6 +249,14 @@ let boardPath
 let boardData
 let currentBoard = 0
 
+// Helper function to update currentBoard and keep window.currentBoard in sync
+const updateCurrentBoard = (newBoard) => {
+  currentBoard = newBoard
+  if (typeof window !== 'undefined') {
+    window.currentBoard = currentBoard
+  }
+}
+
 let scriptFilePath // .fountain/.fdx, only used for multi-scene projects
 let scriptData
 let locations
@@ -296,6 +304,13 @@ let thumbnailCursor = {
   el: null
 }
 
+let groupDivider = {
+  visible: false,
+  x: 0,
+  el: null,
+  index: null
+}
+
 let lastPointer = { x: null, y: null }
 
 let toolbar
@@ -317,6 +332,7 @@ let fakePosterFrameCanvas
 let exportWebWindow
 
 let dragMode = false
+let isMovingBoards = false
 let preventDragMode = false
 let dragPoint
 let dragTarget
@@ -398,8 +414,37 @@ const load = async (event, args) => {
       boardPath.pop()
       boardPath = boardPath.join(path.sep)
       log.info(' BOARD PATH: ', boardFilename)
+      let fileContent = null
       try {
-        boardData = JSON.parse(fs.readFileSync(boardFilename))
+        fileContent = fs.readFileSync(boardFilename, 'utf8')
+        boardData = JSON.parse(fileContent)
+        
+        // Expose to window object for global access
+        window.boardData = boardData
+        window.currentBoard = currentBoard
+        window.boardFilename = boardFilename
+        
+        // Validate boardData structure
+        if (!boardData) {
+          throw new Error('File contains no data')
+        }
+        
+        if (!boardData.boards) {
+          console.warn('[MainWindow] File is missing "boards" property, creating empty array')
+          boardData.boards = []
+        }
+        
+        if (!Array.isArray(boardData.boards)) {
+          console.warn('[MainWindow] "boards" property is not an array, converting to array')
+          boardData.boards = []
+        }
+        
+        // Ensure other required properties exist
+        if (!boardData.version) {
+          boardData.version = '1.0'
+        }
+        
+        
         ipcRenderer.send('analyticsEvent', 'Application', 'open', boardFilename, boardData.boards.length)
 
         store.dispatch({
@@ -407,6 +452,8 @@ const load = async (event, args) => {
           payload: { path: boardFilename }
         })
       } catch (error) {
+        console.error(`[MainWindow] Error loading file ${boardFilename}:`, error)
+        console.error(`[MainWindow] File content preview:`, fileContent ? fileContent.substring(0, 200) + '...' : 'No content')
         throw new Error(`Could not read file ${path.basename(boardFilename)}. The file may be inaccessible or corrupt.\nError: ${error.message}`)
       }
     }
@@ -541,6 +588,11 @@ let toggleNewShot = () => {
   markBoardFileDirty()
   renderThumbnailDrawer()
   storeUndoStateForScene()
+  
+  // Notify GIF group manager of board changes
+  if (typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
+    window.exportIntegration.gifGroupManager.updateTimelineDisplay()
+  }
 }
 
 const commentOnLineMileage = (miles) => {
@@ -885,6 +937,30 @@ const verifyScene = async () => {
     boardsWithMissingPosterFrames.forEach(board => savePosterFrame(board, true))
     notifications.notify({ message: `Done. Added ${boardsWithMissingPosterFrames.length} posterframes.`, timing: 60 })
   }
+
+  // Initialize export integration now that board data is loaded
+  // Initialize export integration, but do not auto-open GIF grouping UI
+  ensureExportIntegration()
+  
+  // Clear group cache when export integration is ready
+  if (window.exportIntegration && window.exportIntegration.gifGroupManager) {
+    // Listen for group changes to clear cache
+    const originalCreateGroup = window.exportIntegration.gifGroupManager.videoGroupManager.createGroup
+    if (originalCreateGroup) {
+      window.exportIntegration.gifGroupManager.videoGroupManager.createGroup = function(...args) {
+        clearGroupCache()
+        return originalCreateGroup.apply(this, args)
+      }
+    }
+    
+    const originalDeleteGroup = window.exportIntegration.gifGroupManager.videoGroupManager.deleteGroup
+    if (originalDeleteGroup) {
+      window.exportIntegration.gifGroupManager.videoGroupManager.deleteGroup = function(...args) {
+        clearGroupCache()
+        return originalDeleteGroup.apply(this, args)
+      }
+    }
+  }
 }
 
 const loadBoardUI = async () => {
@@ -903,14 +979,116 @@ const loadBoardUI = async () => {
     return
   }
 
+  // Dispose of old sketch pane if it exists
+  if (storyboarderSketchPane && typeof storyboarderSketchPane.dispose === 'function') {
+    storyboarderSketchPane.dispose()
+  }
+  
+  // Dispose of old audio file control view if it exists
+  if (audioFileControlView && typeof audioFileControlView.dispose === 'function') {
+    audioFileControlView.dispose()
+  }
+  
   storyboarderSketchPane = new StoryboarderSketchPane(
     document.getElementById('storyboarder-sketch-pane'),
     size,
     store
   )
   storyboarderSketchPane.onWebGLContextLost = () => {
-    alert('An unexpected WebGL error occurred and Storyboarder could not continue.')
-    window.close()
+    console.error('WebGL context lost - attempting to recover...')
+    
+    // Try to recover by hiding all dividers and clearing DOM
+    if (window.exportIntegration && window.exportIntegration.gifGroupManager) {
+      window.exportIntegration.gifGroupManager.hideGroupDividers()
+    }
+    
+    // Clear any pending animations or timeouts
+    const dividers = document.querySelectorAll('.insertion-divider, .group-drag-divider')
+    dividers.forEach(divider => {
+      if (divider.parentNode) {
+        divider.parentNode.removeChild(divider)
+      }
+    })
+    
+    // Force garbage collection to free up memory
+    if (window.gc) {
+      window.gc()
+    }
+    
+    // Try to recover the WebGL context by recreating the sketch pane
+    try {
+      
+      // Dispose of the old sketch pane
+      if (storyboarderSketchPane.sketchPane) {
+        storyboarderSketchPane.sketchPane.dispose()
+      }
+      
+      // Recreate the sketch pane
+      storyboarderSketchPane.sketchPane = new SketchPane({
+        imageWidth: storyboarderSketchPane.canvasSize[0],
+        imageHeight: storyboarderSketchPane.canvasSize[1],
+        backgroundColor: 0x333333,
+        onWebGLContextLost: storyboarderSketchPane.onWebGLContextLost
+      })
+      
+      storyboarderSketchPane.sketchPane.efficiencyMode = !enableHighQualityDrawingEngine
+      
+      // Reload brushes
+      storyboarderSketchPane.sketchPane.loadBrushes({
+        brushes: JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'data', 'brushes', 'brushes.json'))),
+        brushImagePath: path.join(__dirname, '..', '..', 'data', 'brushes')
+      }).then(() => {
+        notifications.notify({
+          message: 'WebGL context recovered successfully!',
+          timing: 5
+        })
+        
+        // Update the DOM element
+        storyboarderSketchPane.sketchPaneDOMElement = storyboarderSketchPane.sketchPane.getDOMElement()
+        
+        // Recreate layers
+        storyboarderSketchPane.sketchPane.newLayer({ name: 'shot-generator' })
+        storyboarderSketchPane.sketchPane.newLayer({ name: 'reference' })
+        storyboarderSketchPane.sketchPane.newLayer({ name: 'fill' })
+        storyboarderSketchPane.sketchPane.newLayer({ name: 'tone' })
+        storyboarderSketchPane.sketchPane.newLayer({ name: 'pencil' })
+        storyboarderSketchPane.sketchPane.newLayer({ name: 'ink' })
+        storyboarderSketchPane.sketchPane.newLayer({ name: 'onion' })
+        storyboarderSketchPane.sketchPane.newLayer({ name: 'notes' })
+        storyboarderSketchPane.sketchPane.newLayer({ name: 'guides' })
+        storyboarderSketchPane.sketchPane.newLayer({ name: 'composite' })
+        
+        // Update the current board
+        if (typeof updateSketchPaneBoard === 'function') {
+          updateSketchPaneBoard()
+        }
+      }).catch(err => {
+        console.error('Failed to recover WebGL context:', err)
+        notifications.notify({
+          message: 'WebGL context could not be recovered. Please restart the application.',
+          timing: 10
+        })
+        
+        // Only close if we can't recover
+        setTimeout(() => {
+          alert('WebGL context could not be recovered. Please restart the application.')
+          window.close()
+        }, 2000)
+      })
+      
+    } catch (err) {
+      console.error('Failed to recreate sketch pane:', err)
+      notifications.notify({
+        message: 'WebGL context could not be recovered. Please restart the application.',
+        timing: 10
+      })
+      
+      // Only close if we can't recover
+      setTimeout(() => {
+        alert('WebGL context could not be recovered. Please restart the application.')
+        window.close()
+      }, 2000)
+    }
   }
   await storyboarderSketchPane.load()
 
@@ -1047,6 +1225,11 @@ const loadBoardUI = async () => {
           sfx.playEffect(e.target.checked ? 'on' : 'off')
           markBoardFileDirty()
           textInputMode = false
+          
+          // Notify GIF group manager of board changes
+          if (typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
+            window.exportIntegration.gifGroupManager.updateTimelineDisplay()
+          }
           break
         case 'dialogue':
           renderCaption()
@@ -1103,6 +1286,9 @@ const loadBoardUI = async () => {
           break
         case 'notes':
           boardData.boards[currentBoard].notes = (e.target.value)
+          break
+        case 'focal-length':
+          boardData.boards[currentBoard].focalLength = (e.target.value)
           break
       }
       markBoardFileDirty()
@@ -1168,6 +1354,213 @@ const loadBoardUI = async () => {
     renderMetaData()
   })
 
+  // Custom Layers Functionality
+  const customLayersContainer = document.getElementById('custom-layers-container')
+  let customLayerCounter = 0
+
+  // Custom Input Dialog for Layer Names
+  function showInputDialog(message, title, callback) {
+    // Remove existing input dialog if present
+    const existing = document.querySelector('#input-dialog')
+    if (existing) existing.remove()
+
+    const dialog = document.createElement('div')
+    dialog.id = 'input-dialog'
+    dialog.className = 'input-dialog-overlay'
+    dialog.innerHTML = `
+      <div class="input-dialog-container">
+        <div class="input-dialog-header">
+          <h3>${title}</h3>
+          <button class="input-dialog-close">&times;</button>
+        </div>
+        <div class="input-dialog-content">
+          <p>${message}</p>
+          <input type="text" id="input-dialog-field" placeholder="Enter layer name..." autofocus>
+        </div>
+        <div class="input-dialog-actions">
+          <button id="input-dialog-cancel" class="btn btn-secondary">Cancel</button>
+          <button id="input-dialog-ok" class="btn btn-primary">OK</button>
+        </div>
+      </div>
+    `
+
+    document.body.appendChild(dialog)
+
+    const inputField = dialog.querySelector('#input-dialog-field')
+    const okButton = dialog.querySelector('#input-dialog-ok')
+    const cancelButton = dialog.querySelector('#input-dialog-cancel')
+    const closeButton = dialog.querySelector('.input-dialog-close')
+
+    // Focus input field
+    setTimeout(() => inputField.focus(), 100)
+
+    // Handle OK button
+    const handleOk = () => {
+      const value = inputField.value.trim()
+      if (value) {
+        closeDialog()
+        callback(value)
+      }
+    }
+
+    // Handle Cancel button
+    const handleCancel = () => {
+      closeDialog()
+      callback(null)
+    }
+
+    // Handle close button
+    const handleClose = () => {
+      closeDialog()
+      callback(null)
+    }
+
+    // Close dialog function
+    const closeDialog = () => {
+      if (dialog.parentNode) {
+        dialog.parentNode.removeChild(dialog)
+      }
+    }
+
+    // Event listeners
+    okButton.addEventListener('click', handleOk)
+    cancelButton.addEventListener('click', handleCancel)
+    closeButton.addEventListener('click', handleClose)
+
+    // Handle Enter key
+    inputField.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        handleOk()
+      } else if (e.key === 'Escape') {
+        handleCancel()
+      }
+    })
+
+    // Prevent dev tools from opening on F12 and other shortcuts
+    const preventDevTools = (e) => {
+      if (e.key === 'F12' ||
+          (e.ctrlKey && e.shiftKey && e.key === 'I') ||
+          (e.ctrlKey && e.shiftKey && e.key === 'J') ||
+          (e.ctrlKey && e.shiftKey && e.key === 'C') ||
+          (e.ctrlKey && e.key === 'u')) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+    }
+
+    dialog.addEventListener('keydown', preventDevTools)
+  }
+
+  // Initialize custom layers for current board
+  const initializeCustomLayers = () => {
+    const board = boardData.boards[currentBoard]
+    if (!board.customLayers) {
+      board.customLayers = []
+    }
+
+    // Clear existing custom layers UI
+    customLayersContainer.innerHTML = ''
+
+    // Add existing custom layers to UI
+    board.customLayers.forEach((layer, index) => {
+      addCustomLayerToUI(layer.id, layer.label, layer.value, index)
+    })
+  }
+
+  // Add custom layer to UI
+  const addCustomLayerToUI = (id, label, value, index) => {
+    const layerRow = document.createElement('div')
+    layerRow.className = 'custom-layer-row'
+    layerRow.dataset.id = id
+
+    layerRow.innerHTML = `
+      <div class="custom-layer-label">${label}:</div>
+      <input type="text" class="custom-layer-input" value="${value || ''}" data-layer-id="${id}">
+      <button class="custom-layer-remove" data-layer-id="${id}">×</button>
+    `
+
+    customLayersContainer.appendChild(layerRow)
+
+    // Add event listeners
+    const input = layerRow.querySelector('.custom-layer-input')
+    const removeBtn = layerRow.querySelector('.custom-layer-remove')
+
+    input.addEventListener('input', (e) => {
+      updateCustomLayerValue(id, e.target.value)
+    })
+
+    removeBtn.addEventListener('click', () => {
+      removeCustomLayer(id)
+    })
+  }
+
+  // Add new custom layer
+  const addCustomLayer = (label = 'Custom') => {
+    const board = boardData.boards[currentBoard]
+    if (!board.customLayers) {
+      board.customLayers = []
+    }
+
+    const layerId = `custom-${Date.now()}`
+    const newLayer = {
+      id: layerId,
+      label: label,
+      value: ''
+    }
+
+    board.customLayers.push(newLayer)
+    addCustomLayerToUI(layerId, label, '', board.customLayers.length - 1)
+    markBoardFileDirty()
+  }
+
+  // Update custom layer value
+  const updateCustomLayerValue = (layerId, value) => {
+    const board = boardData.boards[currentBoard]
+    if (board.customLayers) {
+      const layer = board.customLayers.find(l => l.id === layerId)
+      if (layer) {
+        layer.value = value
+        markBoardFileDirty()
+      }
+    }
+  }
+
+  // Remove custom layer
+  const removeCustomLayer = (layerId) => {
+    const board = boardData.boards[currentBoard]
+    if (board.customLayers) {
+      board.customLayers = board.customLayers.filter(l => l.id !== layerId)
+
+      // Remove from UI
+      const layerRow = customLayersContainer.querySelector(`[data-id="${layerId}"]`)
+      if (layerRow) {
+        layerRow.remove()
+      }
+
+      markBoardFileDirty()
+    }
+  }
+
+  // Add custom layer button event listener
+  document.getElementById('add-custom-layer').addEventListener('click', () => {
+    showInputDialog(
+      'Enter a name for the new custom layer:',
+      'Add Custom Layer',
+      (label) => {
+        if (label && label.trim()) {
+          addCustomLayer(label.trim())
+        }
+      }
+    )
+  })
+
+  // Update renderMetaData to include custom layers
+  const originalRenderMetaData = renderMetaData
+  renderMetaData = () => {
+    originalRenderMetaData()
+    initializeCustomLayers()
+  }
+
 
     // for (var item of document.querySelectorAll('.thumbnail')) {
     //   item.classList.remove('active')
@@ -1231,6 +1624,15 @@ const loadBoardUI = async () => {
       dragTarget.scrollLeft = scrollPoint[0] + (dragPoint[0] - e.pageX)
       dragTarget.scrollTop = scrollPoint[1] + (dragPoint[1] - e.pageY)
     }
+
+    // Group dividers disabled - no longer showing during drag
+    // if (selections && selections.size > 0 && (dragMode || isMovingBoards)) {
+    //   // Update divider position based on mouse position
+    //   updateGroupDivider(e.clientX, e.clientY)
+    // } else if (selections && selections.size > 0) {
+    //   // Hide dividers when not dragging
+    //   hideGroupDivider()
+    // }
   })
 
   window.addEventListener('pointerup', (e)=>{
@@ -1238,6 +1640,13 @@ const loadBoardUI = async () => {
       disableDragMode()
       preventDragMode = false
     }
+
+    if (isMovingBoards) {
+      isMovingBoards = false
+    }
+
+    // Group dividers disabled - no longer hiding during drag
+    // hideGroupDivider()
 
     mouseDragStartX = null
     clearTimeout(editModeTimer)
@@ -1269,9 +1678,46 @@ const loadBoardUI = async () => {
       if (!util.isUndefined(index)) {
         log.info('user requests move operation:', selections, 'to insert after', index)
         saveImageFile().then(() => {
+          // Check if dropping on a group divider
+          let dividerInfo = null
+          if (window.exportIntegration && window.exportIntegration.gifGroupManager) {
+            dividerInfo = window.exportIntegration.gifGroupManager.isOverDivider(index, x)
+          }
+
           let didChange = moveSelectedBoards(index)
 
-          if (didChange) {
+      if (didChange) {
+        // Handle group joining/leaving based on divider action (with WebGL safety checks)
+        if (dividerInfo && window.exportIntegration && window.exportIntegration.gifGroupManager &&
+            storyboarderSketchPane && storyboarderSketchPane.sketchPane && storyboarderSketchPane.sketchPane.gl) {
+          const firstSelection = Math.min(...Array.from(selections))
+          const groups = window.exportIntegration.gifGroupManager.videoGroupManager.getAllGroups()
+
+          // Check if the dragged board is currently in a group
+          const draggedBoardGroups = window.exportIntegration.gifGroupManager.videoGroupManager.getGroupsForBoard(firstSelection)
+          const isCurrentlyInGroup = draggedBoardGroups.length > 0
+
+          if (dividerInfo.action === 'join-group') {
+            // Find the group to join based on the insertion point
+            const targetGroup = groups.find(group => {
+              const groupStart = Math.min(...group.boardIds)
+              const groupEnd = Math.max(...group.boardIds)
+              return (dividerInfo.insertionIndex >= groupStart && dividerInfo.insertionIndex <= groupEnd + 1)
+            })
+
+            if (targetGroup) {
+              window.exportIntegration.gifGroupManager.videoGroupManager.addBoardToGroup(targetGroup.id, firstSelection)
+            }
+          } else if (dividerInfo.action === 'leave-group' && isCurrentlyInGroup) {
+            // Remove the board from all its current groups
+            draggedBoardGroups.forEach(group => {
+              window.exportIntegration.gifGroupManager.videoGroupManager.removeBoardFromGroup(group.id, firstSelection)
+            })
+          } else if (dividerInfo.action === 'insert') {
+            // Just insert without changing group membership
+          }
+        }
+
             notifications.notify({message: 'Reordered!', timing: 5})
           }
 
@@ -1580,7 +2026,7 @@ const loadBoardUI = async () => {
       if (!util.isUndefined(node) && !isNaN(node)) {
         if (currentBoard !== node) {
           saveImageFile().then(() => {
-            currentBoard = node
+            updateCurrentBoard(node)
             gotoBoard(currentBoard)
           })
         }
@@ -1744,6 +2190,16 @@ const loadBoardUI = async () => {
     } else {
       // dispose of any audio buffers
       audioPlayback.dispose()
+      
+      // dispose of sketch pane to clean up ResizeObserver
+      if (storyboarderSketchPane && typeof storyboarderSketchPane.dispose === 'function') {
+        storyboarderSketchPane.dispose()
+      }
+      
+      // dispose of audio file control view to clean up ResizeObserver
+      if (audioFileControlView && typeof audioFileControlView.dispose === 'function') {
+        audioFileControlView.dispose()
+      }
 
       // remove any existing listeners
       linkedFileManager.dispose()
@@ -2118,15 +2574,17 @@ const renderScene = async () => {
       onSetCurrentBoardIndex: async index => {
         if (currentBoard !== index) {
           await saveImageFile()
-          currentBoard = index
+          updateCurrentBoard(index)
           gotoBoard(currentBoard)
         }
       },
 
       onMoveSelectedBoards: (_selections, _position) => {
         selections = _selections
+        isMovingBoards = true
         let didChange = moveSelectedBoards(_position)
         renderThumbnailDrawer() // calls renderSceneTimeline
+        isMovingBoards = false
         return didChange
       },
 
@@ -2165,6 +2623,10 @@ const renderScene = async () => {
 
   // render the thumbnail drawer
   renderThumbnailDrawer()
+  
+  // Expose renderThumbnailDrawer on window for external access
+  window.renderThumbnailDrawer = renderThumbnailDrawer
+  
   // go to the correct board
   audioPlayback.setBypassed(true)
   await gotoBoard(currentBoard)
@@ -2239,6 +2701,17 @@ let newBoard = async (position, shouldAddToUndoStack = true) => {
     sfx.down(-2, 0)
   }
 
+  // Notify GIF group manager of board changes
+  if (typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
+    // Update the group manager's board data reference and force group index update
+    window.exportIntegration.gifGroupManager.videoGroupManager.updateBoardDataReference(boardData)
+    window.exportIntegration.gifGroupManager.videoGroupManager.forceUpdateAllGroups()
+    // Use batched UI update instead of immediate update
+    window.exportIntegration.gifGroupManager.batchUIUpdates(() => {
+      window.exportIntegration.gifGroupManager.updateTimelineDisplay()
+    })
+  }
+
   return position
 }
 
@@ -2296,6 +2769,16 @@ let insertNewBoardsWithFiles = async filepaths => {
   }
 
   renderThumbnailDrawer()
+
+  // Update group manager after all boards have been inserted
+  if (numAdded > 0 && typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
+    window.exportIntegration.gifGroupManager.videoGroupManager.updateBoardDataReference(boardData)
+    window.exportIntegration.gifGroupManager.videoGroupManager.forceUpdateAllGroups()
+    // Use batched UI update instead of immediate update
+    window.exportIntegration.gifGroupManager.batchUIUpdates(() => {
+      window.exportIntegration.gifGroupManager.updateTimelineDisplay()
+    })
+  }
 
   if (numAdded > 0) {
     notifications.notify({
@@ -2392,9 +2875,35 @@ let saveBoardFile = (opt = { force: false }) => {
   if (boardFileDirty) {
     clearTimeout(boardFileDirtyTimer)
     boardData.version = pkg.version
+    
+    // Ensure group data is saved to the main project file
+    if (typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
+      const groupManager = window.exportIntegration.gifGroupManager.videoGroupManager
+      const groupsArray = Array.from(groupManager.groups.values())
+      const groupsData = groupsArray.map(group => ({
+        id: group.id,
+        name: group.name,
+        originalName: group.originalName,
+        boardIds: group.boardIds,
+        boardUids: group.boardUids,
+        color: group.color,
+        fps: group.fps,
+        duration: group.duration,
+        timingMode: group.timingMode,
+        advancedMode: group.advancedMode,
+        boardTimings: group.boardTimings,
+        loop: group.loop,
+        createdAt: group.createdAt,
+        isRenamed: group.isRenamed
+      }))
+      
+      boardData.videoGroups = groupsData
+    }
+    
     if (opt.force || prefsModule.getPrefs()['enableAutoSave']) {
 
       try {
+        
         // save to backup file
         let backupFilePath = boardFilename + '.backup-' + Date.now()
         fs.writeFileSync(backupFilePath, JSON.stringify(boardData, null, 2))
@@ -3206,7 +3715,24 @@ const updateThumbnailDisplayFromMemory = () => {
 
 let deleteSingleBoard = (index) => {
   if (boardData.boards.length > 1) {
+    // Clean up GIF groups when board is deleted
+    if (typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
+      // Remove board from all groups before deletion
+      window.exportIntegration.gifGroupManager.removeBoardFromGroups(index)
+    }
+    
     boardData.boards.splice(index, 1)
+    
+    // Update group manager's board data reference and force group index update
+    if (typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
+      window.exportIntegration.gifGroupManager.videoGroupManager.updateBoardDataReference(boardData)
+      window.exportIntegration.gifGroupManager.videoGroupManager.forceUpdateAllGroups()
+      // Use batched UI update instead of immediate update
+      window.exportIntegration.gifGroupManager.batchUIUpdates(() => {
+        window.exportIntegration.gifGroupManager.updateTimelineDisplay()
+      })
+    }
+    
     markBoardFileDirty()
     renderThumbnailDrawer()
   }
@@ -3234,6 +3760,17 @@ let deleteBoards = (args)=> {
 
       // clear and re-render selections
       selections.clear()
+      
+      // Update group manager after all deletions
+      if (typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
+        window.exportIntegration.gifGroupManager.videoGroupManager.updateBoardDataReference(boardData)
+        window.exportIntegration.gifGroupManager.videoGroupManager.forceUpdateAllGroups()
+        // Use batched UI update instead of immediate update
+        window.exportIntegration.gifGroupManager.batchUIUpdates(() => {
+          window.exportIntegration.gifGroupManager.updateTimelineDisplay()
+        })
+      }
+      
       renderThumbnailDrawer()
       storeUndoStateForScene()
       numDeleted = arr.length
@@ -3362,6 +3899,28 @@ let duplicateBoard = async () => {
     // so reflect spliced board in thumbnail drawer
     renderThumbnailDrawer()
 
+    // Check if the original board is in a group and add the duplicate to the same group
+    if (typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
+      const groupManager = window.exportIntegration.gifGroupManager.videoGroupManager
+      
+      // Update board data reference first
+      groupManager.updateBoardDataReference(boardData)
+      
+      // Check if the original board is in a group
+      const originalGroup = groupManager.findGroupContainingBoard(currentBoard)
+      if (originalGroup) {
+        // Add the duplicate board to the same group
+        groupManager.addBoardToGroup(originalGroup.id, insertAt)
+      }
+      
+      // Force group index update and UI refresh
+      groupManager.forceUpdateAllGroups()
+      // Use batched UI update instead of immediate update
+      window.exportIntegration.gifGroupManager.batchUIUpdates(() => {
+        window.exportIntegration.gifGroupManager.updateTimelineDisplay()
+      })
+    }
+
     // sfx.bip('c7')
     sfx.down(-1, 2)
     notifications.notify({ message: 'Duplicated board.', timing: 5 })
@@ -3428,7 +3987,7 @@ let goNextBoard = async (direction, shouldPreserveSelections = false) => {
   if (index !== currentBoard) {
     log.info(index, '!==', currentBoard)
     await saveImageFile()
-    currentBoard = index
+    updateCurrentBoard(index)
     log.info('calling gotoBoard')
     await gotoBoard(currentBoard, shouldPreserveSelections)
   } else {
@@ -3460,9 +4019,9 @@ let gotoBoard = (boardNumber, shouldPreserveSelections = false) => {
   return new Promise((resolve, reject) => {
     clearTimeout(drawIdleTimer)
 
-    currentBoard = boardNumber
-    currentBoard = Math.max(currentBoard, 0)
-    currentBoard = Math.min(currentBoard, boardData.boards.length - 1)
+    updateCurrentBoard(boardNumber)
+    updateCurrentBoard(Math.max(currentBoard, 0))
+    updateCurrentBoard(Math.min(currentBoard, boardData.boards.length - 1))
 
     if (!shouldPreserveSelections) selections.clear()
     selections = new Set([...selections.add(currentBoard)].sort(util.compareNumbers))
@@ -3631,27 +4190,194 @@ const renderShotMetadata = () => {
   document.querySelector('#board-metadata #board-numbers').innerHTML = `${i18n.t('main-window.board-information.board')}: ` + boardData.boards[currentBoard].number + ` ${i18n.t("main-window.board-information.of")} ` + boardData.boards.length
 }
 
-let renderMetaData = () => {
-  renderShotMetadata()
+// Helper functions to check if a board is in a group
+// Cache to prevent repeated expensive operations
+let groupCache = new Map()
+let lastCacheUpdate = 0
+const CACHE_DURATION = 1000 // 1 second
 
-  // reset values
-  let editableInputs = document.querySelectorAll('#board-metadata input:not(.layers-ui-reference-opacity), textarea')
-  for (var item of editableInputs) {
-    item.value = ''
-    item.checked = false
+const checkIfBoardInGroup = (boardIndex) => {
+  try {
+    // Check cache first
+    const now = Date.now()
+    if (now - lastCacheUpdate < CACHE_DURATION && groupCache.has(boardIndex)) {
+      return groupCache.get(boardIndex).isInGroup
+    }
+
+    if (!window.exportIntegration || !window.exportIntegration.gifGroupManager) {
+      return false
+    }
+    
+    const groups = window.exportIntegration.gifGroupManager.videoGroupManager.getAllGroups()
+    const isInGroup = groups.some(group => group.boardIds.includes(boardIndex))
+    
+    // Update cache
+    groupCache.set(boardIndex, { isInGroup, isFirst: false })
+    lastCacheUpdate = now
+    
+    return isInGroup
+  } catch (error) {
+    console.warn('Error checking if board is in group:', error)
+    return false
   }
+}
 
-  if (boardData.boards[currentBoard].newShot) {
-    document.querySelector('input[name="newShot"]').checked = true
+const isFirstBoardInGroup = (boardIndex) => {
+  try {
+    // Check cache first
+    const now = Date.now()
+    if (now - lastCacheUpdate < CACHE_DURATION && groupCache.has(boardIndex)) {
+      return groupCache.get(boardIndex).isFirst
+    }
+
+    if (!window.exportIntegration || !window.exportIntegration.gifGroupManager) {
+      return false
+    }
+    
+    const groups = window.exportIntegration.gifGroupManager.videoGroupManager.getAllGroups()
+    const group = groups.find(group => group.boardIds.includes(boardIndex))
+    
+    if (!group) {
+      return false
+    }
+    
+    const isFirst = group.boardIds[0] === boardIndex
+    
+    // Update cache
+    groupCache.set(boardIndex, { isInGroup: true, isFirst })
+    lastCacheUpdate = now
+    
+    return isFirst
+  } catch (error) {
+    console.warn('Error checking if board is first in group:', error)
+    return false
+  }
+}
+
+// Clear cache when groups change
+const clearGroupCache = () => {
+  if (groupCache) {
+    groupCache.clear()
+  }
+  lastCacheUpdate = 0
+}
+
+// Memory cleanup function
+const cleanupGroupCache = () => {
+  if (groupCache) {
+    groupCache.clear()
+  }
+  groupCache = new Map()
+  lastCacheUpdate = 0
+}
+
+// Clean up cache periodically to prevent memory leaks
+setInterval(() => {
+  const now = Date.now()
+  if (now - lastCacheUpdate > 30000) { // 30 seconds
+    cleanupGroupCache()
+  }
+}, 30000)
+
+// Throttle renderMetaData to prevent excessive calls
+let renderMetaDataTimeout = null
+let lastRenderMetaDataCall = 0
+
+let renderMetaData = () => {
+  // Throttle calls to prevent memory issues
+  const now = Date.now()
+  if (now - lastRenderMetaDataCall < 100) { // 100ms throttle
+    if (renderMetaDataTimeout) {
+      clearTimeout(renderMetaDataTimeout)
+    }
+    renderMetaDataTimeout = setTimeout(() => {
+      renderMetaDataInternal()
+    }, 100)
+    return
+  }
+  
+  renderMetaDataInternal()
+}
+
+const renderMetaDataInternal = () => {
+  lastRenderMetaDataCall = Date.now()
+  
+  try {
+    renderShotMetadata()
+
+    // reset values
+    let editableInputs = document.querySelectorAll('#board-metadata input:not(.layers-ui-reference-opacity), textarea')
+    for (var item of editableInputs) {
+      item.value = ''
+      item.checked = false
+    }
+
+    // Check if current board is in a group and if it's the first board (lowest index)
+    let isInGroup = false
+    let isFirstInGroup = false
+    
+    
+    try {
+      if (window.exportIntegration && window.exportIntegration.gifGroupManager) {
+        const groups = window.exportIntegration.gifGroupManager.videoGroupManager.getAllGroups()
+        const currentBoardUid = boardData.boards[currentBoard]?.uid
+        
+        
+        if (currentBoardUid) {
+          // Find which group this board belongs to by UID
+          const boardGroup = groups.find(group => {
+            if (group.boardUids && group.boardUids.length > 0) {
+              return group.boardUids.includes(currentBoardUid)
+            }
+            // Fallback to index-based checking for older groups
+            return group.boardIds && group.boardIds.includes(currentBoard)
+          })
+          
+          if (boardGroup) {
+            isInGroup = true
+            // Check if this board is first in the group
+            if (boardGroup.boardUids && boardGroup.boardUids.length > 0) {
+              // Use UID-based checking
+              const firstBoardUid = boardGroup.boardUids[0]
+              isFirstInGroup = (currentBoardUid === firstBoardUid)
+            } else {
+              // Fallback to index-based checking
+              const minIndex = Math.min(...boardGroup.boardIds)
+              isFirstInGroup = (currentBoard === minIndex)
+            }
+          }
+        }
+      }
+      
+      // Note: Removed fallback check for window.groupedBoardIndices as it can be stale
+      // The primary group checking logic above should be sufficient and more reliable
+    } catch (error) {
+      console.warn('Group checking failed, using fallback:', error)
+      isInGroup = false
+      isFirstInGroup = true
+    }
+    
+
+  // Set newShot checkbox based on board data (before group logic)
+  const newShotCheckbox = document.querySelector('input[name="newShot"]')
+  if (newShotCheckbox) {
+    newShotCheckbox.checked = !!boardData.boards[currentBoard].newShot
   }
 
   if (boardData.boards[currentBoard].duration) {
     if (selections.size == 1) {
       // show current board
       for (let input of editableInputs) {
-        input.disabled = false
-        let label = document.querySelector(`label[for="${input.name}"]`)
-        label && label.classList.remove('disabled')
+        // Disable fields if board is in group but not first
+        if (isInGroup && !isFirstInGroup) {
+          input.disabled = (input.name !== 'duration' && input.name !== 'frames')
+          let label = document.querySelector(`label[for="${input.name}"]`)
+          label && label.classList.add('disabled')
+        } else {
+          input.disabled = false
+          let label = document.querySelector(`label[for="${input.name}"]`)
+          label && label.classList.remove('disabled')
+        }
       }
 
       document.querySelector('input[name="duration"]').value = boardData.boards[currentBoard].duration != null
@@ -3696,6 +4422,85 @@ let renderMetaData = () => {
   if (boardData.boards[currentBoard].notes) {
     document.querySelector('textarea[name="notes"]').value = boardData.boards[currentBoard].notes
   }
+  if (boardData.boards[currentBoard].focalLength) {
+    document.querySelector('input[name="focal-length"]').value = boardData.boards[currentBoard].focalLength
+  }
+
+    // Disable fields for boards in groups (except first board)
+    // Note: dialogue field is NEVER affected by this rule
+    if (isInGroup && !isFirstInGroup) {
+      // First, disable and uncheck newShot checkbox for non-first boards in groups
+      const newShotCheckbox = document.querySelector('input[name="newShot"]')
+      if (newShotCheckbox) {
+        newShotCheckbox.disabled = true
+        newShotCheckbox.checked = false  // Force uncheck
+        // Also update the board data to reflect this change
+        if (boardData.boards[currentBoard]) {
+          boardData.boards[currentBoard].newShot = false
+        }
+        const label = document.querySelector(`label[for="newShot"]`)
+        if (label) {
+          label.classList.add('disabled')
+        }
+      }
+      
+      // Then, after a 5ms delay, disable the other fields
+      setTimeout(() => {
+        // Disable action, notes, focal length fields (NOT dialogue)
+        const fieldsToDisable = ['action', 'notes', 'focal-length']
+        fieldsToDisable.forEach(fieldName => {
+          const field = document.querySelector(`[name="${fieldName}"]`)
+          if (field) {
+            field.disabled = true
+            const label = document.querySelector(`label[for="${fieldName}"]`)
+            if (label) {
+              label.classList.add('disabled')
+            }
+          }
+        })
+        
+        // Force UI update at the end with proper delay
+        if (typeof window !== 'undefined' && window.renderMetaData) {
+          setTimeout(() => {
+            window.renderMetaData()
+          }, 100) // Increased delay to 100ms
+        }
+      }, 5)
+    } else {
+      // Ensure fields are enabled for non-grouped boards or first board in group
+      const fieldsToEnable = ['action', 'notes', 'focal-length']
+      fieldsToEnable.forEach(fieldName => {
+        const field = document.querySelector(`[name="${fieldName}"]`)
+        if (field) {
+          field.disabled = false
+          const label = document.querySelector(`label[for="${fieldName}"]`)
+          if (label) {
+            label.classList.remove('disabled')
+          }
+        }
+      })
+      
+      // Enable newShot checkbox (let it keep its original value)
+      const newShotCheckbox = document.querySelector('input[name="newShot"]')
+      if (newShotCheckbox) {
+        newShotCheckbox.disabled = false
+        const label = document.querySelector(`label[for="newShot"]`)
+        if (label) {
+          label.classList.remove('disabled')
+        }
+      }
+    }
+    
+    // Always ensure dialogue field is enabled (never affected by group rules)
+    const dialogueField = document.querySelector('input[name="dialogue"]')
+    if (dialogueField) {
+      dialogueField.disabled = false
+      const label = document.querySelector(`label[for="dialogue"]`)
+      if (label) {
+        label.classList.remove('disabled')
+      }
+    }
+    
   renderMetaDataLineMileage()
 
   // TODO how to regenerate tooltips?
@@ -3711,6 +4516,25 @@ let renderMetaData = () => {
   audioFileControlView.setState({
     boardAudio: boardData.boards[currentBoard].audio
   })
+  
+  } catch (error) {
+    console.warn('Error in renderMetaDataInternal:', error)
+    // Fallback to basic rendering without group checks
+    renderShotMetadata()
+  }
+  
+  // Force a final UI update to ensure all changes are reflected
+  setTimeout(() => {
+    // Trigger any pending UI updates
+    if (typeof window !== 'undefined' && window.renderThumbnailDrawer) {
+      window.renderThumbnailDrawer()
+    }
+    
+    // Also update the timeline display if GIF group manager is available
+    if (typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
+      window.exportIntegration.gifGroupManager.updateTimelineDisplay()
+    }
+  }, 150) // Increased delay to 150ms
 }
 
 const renderCaption = () => {
@@ -4038,15 +4862,18 @@ const updateSketchPaneBoard = async () => {
 let renderThumbnailDrawerSelections = () => {
   renderSceneTimeline()
 
-  let thumbnails = document.querySelectorAll('.thumbnail')
+  // Check both thumbnail types to ensure we catch all selection visuals
+  let thumbnails = document.querySelectorAll('.thumbnail, .t-scene')
 
   for (let thumb of thumbnails) {
-    let i = Number(thumb.dataset.thumbnail)
+    let i = Number(thumb.dataset.thumbnail || thumb.dataset.node)
 
     thumb.classList.toggle('active', currentBoard == i)
     thumb.classList.toggle('selected', selections.has(i))
     thumb.classList.toggle('editing', isEditMode)
   }
+
+  console.log('Rendering selections - thumbnails found:', thumbnails.length, 'selections:', Array.from(selections))
 }
 
 const updateSceneTiming = () => {
@@ -4082,6 +4909,42 @@ const updateSceneTiming = () => {
     board.time = currentTime
 
     currentTime += boardModel.boardDuration(boardData, board)
+  }
+}
+
+// Expose a canonical helper so other modules can use the exact same
+// shot naming that the main window/export uses.
+// Returns full shot label shown on storyboard (e.g., "10A").
+window.getBoardShotName = (boardIndex) => {
+  try {
+    if (!window.boardData || !Array.isArray(window.boardData.boards)) {
+      return null
+    }
+    
+    const boards = window.boardData.boards
+    if (boardIndex < 0 || boardIndex >= boards.length) {
+      return null
+    }
+    
+    const board = boards[boardIndex]
+    
+    // CRITICAL: Call updateSceneTiming() first to populate board.shot correctly
+    // This is what renderThumbnailDrawer() does before the export
+    updateSceneTiming()
+    
+    // EXACT SAME LOGIC AS EXPORT
+    const shotNumber = (boardIndex + 1).toString().padStart(2, '0')
+    // FORCE USING board.shot - NO FALLBACK
+    if (!board.shot) {
+      console.error(`[getBoardShotName] ERROR: board.shot is empty for board ${boardIndex}!`)
+      return `ERROR_NO_SHOT_${boardIndex}`
+    }
+    const shotName = board.shot
+    
+    
+    return shotName
+  } catch (e) {
+    return String(boardIndex + 1).padStart(2, '0')
   }
 }
 
@@ -5815,6 +6678,16 @@ let pasteBoards = async () => {
 
       renderThumbnailDrawer()
 
+      // Update group manager's board data reference and force group index update
+      if (typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
+        window.exportIntegration.gifGroupManager.videoGroupManager.updateBoardDataReference(boardData)
+        window.exportIntegration.gifGroupManager.videoGroupManager.forceUpdateAllGroups()
+        // Use batched UI update instead of immediate update
+        window.exportIntegration.gifGroupManager.batchUIUpdates(() => {
+          window.exportIntegration.gifGroupManager.updateTimelineDisplay()
+        })
+      }
+
       log.info('paste complete')
       notifications.notify({ message: `Paste complete.` })
       sfx.positive()
@@ -5996,6 +6869,16 @@ const insertBoards = async (dest, insertAt, boards, { layerDataByBoardIndex }) =
     // update the thumbnail
     await saveThumbnailFile(position, { forceReadFromFiles: true })
   }
+  
+  // Update group manager after all boards have been inserted
+  if (typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
+    window.exportIntegration.gifGroupManager.videoGroupManager.updateBoardDataReference(dest)
+    window.exportIntegration.gifGroupManager.videoGroupManager.forceUpdateAllGroups()
+    // Use batched UI update instead of immediate update
+    window.exportIntegration.gifGroupManager.batchUIUpdates(() => {
+      window.exportIntegration.gifGroupManager.updateTimelineDisplay()
+    })
+  }
 }
 
 const fitImageData = async (boardSize, imageData) => {
@@ -6136,6 +7019,60 @@ let moveSelectedBoards = position => {
 
     markBoardFileDirty()
     storeUndoStateForScene()
+    
+    // Update groups after board movement
+    if (typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
+      const fs = require('fs')
+      const path = require('path')
+      
+      // Create exports directory if it doesn't exist
+      const exportsDir = path.join(process.cwd(), 'exports')
+      if (!fs.existsSync(exportsDir)) {
+        fs.mkdirSync(exportsDir, { recursive: true })
+      }
+      
+      const logPath = path.join(exportsDir, 'grouping-debug.log')
+      
+      // Clear log file at start of each test
+      if (fs.existsSync(logPath)) {
+        fs.unlinkSync(logPath)
+      }
+      
+      fs.appendFileSync(logPath, `[${new Date().toISOString()}] ===== BOARD MOVEMENT DEBUG START =====\n`)
+      
+      const beforeGroups = window.exportIntegration.gifGroupManager.videoGroupManager.getAllGroups().map(g => ({ name: g.name, boardIds: g.boardIds, boardUids: g.boardUids }))
+      fs.appendFileSync(logPath, `[${new Date().toISOString()}] Before group update - groups: ${JSON.stringify(beforeGroups, null, 2)}\n`)
+      
+      // Use the new method that handles joining/leaving groups
+      // Note: firstSelection is the OLD position, position is the NEW position
+      window.exportIntegration.gifGroupManager.videoGroupManager.handleBoardMovement([firstSelection], position, firstSelection)
+      
+      const afterGroups = window.exportIntegration.gifGroupManager.videoGroupManager.getAllGroups().map(g => ({ name: g.name, boardIds: g.boardIds, boardUids: g.boardUids }))
+      fs.appendFileSync(logPath, `[${new Date().toISOString()}] After group update - groups: ${JSON.stringify(afterGroups, null, 2)}\n`)
+      
+      fs.appendFileSync(logPath, `[${new Date().toISOString()}] ===== BOARD MOVEMENT DEBUG END =====\n`)
+      
+      window.exportIntegration.gifGroupManager.updateTimelineDisplay()
+      
+      // Update the metadata UI to reflect group changes
+      if (typeof window !== 'undefined' && window.renderMetaData) {
+        setTimeout(() => {
+          window.renderMetaData()
+        }, 100)
+      }
+    } else {
+      const fs = require('fs')
+      const path = require('path')
+      
+      // Create exports directory if it doesn't exist
+      const exportsDir = path.join(process.cwd(), 'exports')
+      if (!fs.existsSync(exportsDir)) {
+        fs.mkdirSync(exportsDir, { recursive: true })
+      }
+      
+      const logPath = path.join(exportsDir, 'grouping-debug.log')
+      fs.appendFileSync(logPath, `[${new Date().toISOString()}] Export integration not available\n`)
+    }
   }
 
   return didChange
@@ -6190,6 +7127,7 @@ let disableEditMode = () => {
     thumbnailCursor.visible = false
     renderThumbnailCursor()
     renderThumbnailDrawerSelections()
+    // hideGroupDivider() // Group dividers disabled
   }
 }
 
@@ -6287,6 +7225,122 @@ let renderThumbnailCursor = () => {
   }
 }
 
+// Group divider functions (based on thumbnail cursor pattern)
+let updateGroupDivider = (x, y) => {
+  const fs = require('fs')
+  const path = require('path')
+  const logPath = path.join(process.cwd(), 'divider-test.log')
+  
+  try {
+    fs.appendFileSync(logPath, `[updateGroupDivider] Called with: dragMode=${dragMode}, isMovingBoards=${isMovingBoards}, selectionsSize=${selections.size}, x=${x}, y=${y}\n`)
+    
+    if ((!dragMode && !isMovingBoards) || selections.size === 0) {
+      fs.appendFileSync(logPath, `[updateGroupDivider] Hiding divider - dragMode: ${dragMode}, isMovingBoards: ${isMovingBoards}, selections: ${selections.size}\n`)
+      hideGroupDivider()
+      return
+    }
+  } catch (error) {
+    // Ignore log errors
+  }
+
+  let el = thumbnailFromPoint(x, y)
+  let index = null
+  
+  if (isBeforeFirstThumbnail(x, y)) {
+    index = 0
+  } else if (el) {
+    index = Number(el.dataset.thumbnail) + 1
+  }
+
+  if (index !== null) {
+    groupDivider.visible = true
+    groupDivider.index = index
+    
+    // Calculate position similar to thumbnail cursor
+    let offset = 0
+    if (el) {
+      offset = el.getBoundingClientRect().width
+      el = thumbnailFromPoint(x, y, offset/2)
+    }
+    
+    if (el) {
+      // Use the same positioning logic as thumbnail cursor
+      let sidebarOffsetX = -el.offsetParent.offsetParent.getBoundingClientRect().left
+      let scrollOffsetX = el.offsetParent.scrollLeft + el.offsetParent.offsetParent.scrollLeft
+      let elementOffsetX = el.getBoundingClientRect().right
+      let arrowOffsetX = 0
+      
+      groupDivider.x = sidebarOffsetX + scrollOffsetX + elementOffsetX + arrowOffsetX
+    } else {
+      // Position at the beginning
+      let timeline = document.querySelector('#timeline')
+      if (timeline) {
+        groupDivider.x = timeline.getBoundingClientRect().left - document.querySelector('#thumbnail-container').getBoundingClientRect().left
+      }
+    }
+    
+    renderGroupDivider()
+  } else {
+    hideGroupDivider()
+  }
+}
+
+let hideGroupDivider = () => {
+  groupDivider.visible = false
+  groupDivider.x = 0
+  groupDivider.el = null
+  groupDivider.index = null
+  renderGroupDivider()
+}
+
+let renderGroupDivider = () => {
+  const fs = require('fs')
+  const path = require('path')
+  const logPath = path.join(process.cwd(), 'divider-test.log')
+  
+  try {
+    fs.appendFileSync(logPath, `[renderGroupDivider] Called with: visible=${groupDivider.visible}, x=${groupDivider.x}\n`)
+    
+    let el = document.querySelector('#group-divider')
+    if (!el) {
+      fs.appendFileSync(logPath, '[renderGroupDivider] Creating new divider element\n')
+      // Create the divider element if it doesn't exist
+      el = document.createElement('div')
+      el.id = 'group-divider'
+      el.style.cssText = `
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        background: #3b82f6;
+        z-index: 1000;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+        box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+      `
+      document.querySelector('#thumbnail-container').appendChild(el)
+    }
+    
+    if (groupDivider.visible) {
+      fs.appendFileSync(logPath, `[renderGroupDivider] Showing divider at x: ${groupDivider.x}\n`)
+      el.style.display = ''
+      el.style.left = groupDivider.x + 'px'
+      el.style.opacity = '1'
+    } else {
+      fs.appendFileSync(logPath, '[renderGroupDivider] Hiding divider\n')
+      el.style.display = 'none'
+      el.style.left = '0px'
+      el.style.opacity = '0'
+    }
+  } catch (error) {
+    // Ignore log errors
+  }
+}
+
+
+
+
 const welcomeMessage = () => {
   let message = []
   let otherMessages
@@ -6377,7 +7431,15 @@ const storeUndoStateForScene = (isBefore) => {
   let scene = getSceneObjectByIndex(currentScene)
   // sceneId is allowed to be null (for a single storyboard with no script)
   let sceneId = scene && scene.scene_id
-  undoStack.addSceneData(isBefore, { sceneId: sceneId, boardData: util.stringifyClone(boardData) })
+  
+  // Include GIF group state in the boardData for undo
+  let boardDataWithGroups = { ...boardData }
+  if (typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
+    const gifGroupsState = window.exportIntegration.gifGroupManager.videoGroupManager.serializeState()
+    boardDataWithGroups.gifGroupsState = gifGroupsState
+  }
+  
+  undoStack.addSceneData(isBefore, { sceneId: sceneId, boardData: util.stringifyClone(boardDataWithGroups) })
 }
 const applyUndoStateForScene = async (state) => {
   await saveImageFile() // needed for redo
@@ -6393,7 +7455,32 @@ const applyUndoStateForScene = async (state) => {
     await verifyScene()
     renderScript()
   }
-  boardData = state.sceneData
+  
+  // Restore board data
+  if (state.sceneData && state.sceneData.boards) {
+    boardData = state.sceneData
+  } else {
+    // Handle GIF group state restoration
+    boardData = state.sceneData
+  }
+  
+  // Restore GIF group state if it exists
+  if (boardData && boardData.gifGroupsState) {
+    console.log('[MainWindow] Restoring GIF group state from undo')
+    if (typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
+      // Update the group manager's board data reference to the restored data
+      window.exportIntegration.gifGroupManager.videoGroupManager.updateBoardDataReference(boardData)
+      window.exportIntegration.gifGroupManager.videoGroupManager.restoreFromState(boardData.gifGroupsState)
+      window.exportIntegration.gifGroupManager.updateGroupsList()
+      window.exportIntegration.gifGroupManager.updateTimelineDisplay()
+    }
+  } else {
+    // Even if there's no group state, update the board data reference
+    if (typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
+      window.exportIntegration.gifGroupManager.videoGroupManager.updateBoardDataReference(boardData)
+    }
+  }
+  
   markBoardFileDirty()
   renderScene()
 }
@@ -6945,10 +8032,40 @@ ipcRenderer.on('exportPDF', (event, args) => {
 const { initializeExportIntegration } = require('../integration/export-integration')
 let exportIntegration = null
 
+// Initialize export integration when board data is ready
+function ensureExportIntegration() {
+  if (!exportIntegration && boardData && boardFilename) {
+    try {
+      exportIntegration = initializeExportIntegration(boardData, boardFilename)
+      
+      // Make it globally accessible for undo system
+      if (typeof window !== 'undefined') {
+        window.exportIntegration = exportIntegration
+      }
+    } catch (error) {
+      console.error('Failed to initialize export integration:', error)
+      return null
+    }
+  }
+  return exportIntegration
+}
+
 ipcRenderer.on('exportEnhancedPDF', (event, args) => {
   try {
+    // Check if boardData and boardFilename are available
+    if (!boardData || !boardFilename) {
+      console.error('Board data or filename not available for enhanced export')
+      // Fallback to regular export
+      openPrintWindow(PDFEXPORTPW, showPDFPrintWindow);
+      return
+    }
+
     if (!exportIntegration) {
       exportIntegration = initializeExportIntegration(boardData, boardFilename)
+      // Make it globally accessible for undo system
+      if (typeof window !== 'undefined') {
+        window.exportIntegration = exportIntegration
+      }
     }
     exportIntegration.showEnhancedExportDialog()
     ipcRenderer.send('analyticsEvent', 'Board', 'exportEnhancedPDF')
@@ -6957,6 +8074,249 @@ ipcRenderer.on('exportEnhancedPDF', (event, args) => {
     // Fallback to regular export
     openPrintWindow(PDFEXPORTPW, showPDFPrintWindow);
   }
+})
+
+// Handle export configuration from the enhanced export window
+ipcRenderer.on('enhanced-export-config', (event, config) => {
+  try {
+    console.log('[MainWindow] Received enhanced-export-config:', config)
+    
+    if (!exportIntegration) {
+      console.log('[MainWindow] Initializing export integration...')
+      exportIntegration = initializeExportIntegration(boardData, boardFilename)
+      // Make it globally accessible for undo system
+      if (typeof window !== 'undefined') {
+        window.exportIntegration = exportIntegration
+      }
+    }
+    
+    console.log('[MainWindow] Calling handleAdvancedPDFExport with config:', config)
+    exportIntegration.handleAdvancedPDFExport(config)
+  } catch (error) {
+    console.error('Failed to handle enhanced export:', error)
+    console.error('Error stack:', error.stack)
+  }
+})
+
+// Handle GIF groups export from the enhanced export window
+ipcRenderer.on('export-gif-groups', (event, config) => {
+  try {
+    if (!exportIntegration) {
+      exportIntegration = initializeExportIntegration(boardData, boardFilename)
+      // Make it globally accessible for undo system
+      if (typeof window !== 'undefined') {
+        window.exportIntegration = exportIntegration
+      }
+    }
+    exportIntegration.exportGifGroups(config)
+  } catch (error) {
+    console.error('Error exporting GIF groups:', error)
+    notifications.notify({message: 'Error exporting GIF groups: ' + error.message, timing: 10})
+  }
+})
+
+// Handle advanced PDF export from the enhanced export window
+ipcRenderer.on('export-pdf-advanced', (event, config) => {
+  try {
+    if (!exportIntegration) {
+      exportIntegration = initializeExportIntegration(boardData, boardFilename)
+      // Make it globally accessible for undo system
+      if (typeof window !== 'undefined') {
+        window.exportIntegration = exportIntegration
+      }
+    }
+    exportIntegration.handleAdvancedPDFExport(config)
+  } catch (error) {
+    console.error('Error handling advanced PDF export:', error)
+    // Fallback to regular export
+    openPrintWindow(PDFEXPORTPW, showPDFPrintWindow);
+  }
+})
+
+// Add keyboard shortcuts for GIF grouping
+document.addEventListener('keydown', (e) => {
+  // Ctrl+G: Group selected boards
+  if (e.ctrlKey && !e.shiftKey && e.key === 'G') {
+    e.preventDefault()
+    try {
+      const integration = ensureExportIntegration()
+      if (integration && integration.gifGroupManager) {
+        // Check if user has manually opened the grouping menu before
+        const hasManuallyOpenedMenu = localStorage.getItem('storyboarder_has_manually_opened_grouping_menu') === 'true'
+        
+        // If not in grouping mode, start it (but only if user has manually opened it before)
+        if (!integration.gifGroupManager.isGroupingMode && hasManuallyOpenedMenu) {
+          integration.gifGroupManager.toggleGroupingMode()
+        }
+      // Small delay to ensure selections are updated
+      setTimeout(() => {
+        // Force sync selections first
+        if (integration.gifGroupManager.syncWithMainSelections) {
+          integration.gifGroupManager.syncWithMainSelections()
+        }
+        
+        // Check both programmatic selections and visual selections
+        const programmaticCount = window.selections ? window.selections.size : 0
+
+        // Also check visual selections (boards that have the 'selected' class)
+        const visualSelections = document.querySelectorAll('.thumbnail.selected, .t-scene.selected')
+        const visualCount = visualSelections.length
+
+        console.log('Programmatic selections:', Array.from(window.selections || []), 'Count:', programmaticCount)
+        console.log('Visual selections found:', visualCount)
+
+        // Use the higher count to be more permissive
+        const effectiveCount = Math.max(programmaticCount, visualCount)
+
+        if (effectiveCount >= 2) {
+          integration.gifGroupManager.createGroupFromSelection()
+        } else {
+          notifications.notify({
+            message: `Select at least 2 boards to create a group (${effectiveCount} selected). Hold Shift and click boards.`,
+            timing: 3
+          })
+        }
+      }, 150) // Slightly longer delay for better stability
+      } else {
+        console.log('Export integration not available')
+      }
+    } catch (error) {
+      console.error('Error in Ctrl+G grouping:', error)
+    }
+  }
+
+  // Ctrl+Shift+G: Ungroup selected boards
+  if (e.ctrlKey && e.shiftKey && e.key === 'G') {
+    e.preventDefault()
+    try {
+      const integration = ensureExportIntegration()
+      if (integration && integration.gifGroupManager) {
+        if (window.selections && window.selections.size > 0) {
+          integration.gifGroupManager.ungroupSelectedBoards()
+        } else {
+          notifications.notify({
+            message: 'Select grouped boards to ungroup them',
+            timing: 3
+          })
+        }
+      } else {
+        console.log('Export integration not available')
+      }
+    } catch (error) {
+      console.error('Error in Ctrl+Shift+G ungrouping:', error)
+    }
+  }
+
+  // Shift+G: Open grouping menu
+  if (!e.ctrlKey && e.shiftKey && e.key === 'G') {
+    e.preventDefault()
+    try {
+      const integration = ensureExportIntegration()
+      if (integration && integration.gifGroupManager) {
+        // Mark that user has manually opened the grouping menu
+        localStorage.setItem('storyboarder_has_manually_opened_grouping_menu', 'true')
+        integration.gifGroupManager.toggleGroupingMode()
+      } else {
+        console.log('Export integration not available')
+      }
+    } catch (error) {
+      console.error('Error in Shift+G menu:', error)
+    }
+  }
+  
+  // Ctrl+Shift+P: Preview GIF groups
+  if (e.ctrlKey && e.shiftKey && e.key === 'P') {
+    e.preventDefault()
+    try {
+      console.log('[MainWindow] Ctrl+Shift+P pressed - previewing GIF groups')
+      const integration = ensureExportIntegration()
+      if (integration && integration.gifGroupManager) {
+        integration.gifGroupManager.previewGroups()
+      } else {
+        console.error('Export integration or GIF Group Manager not available')
+        notifications.notify({
+          message: 'GIF preview not available. Please ensure you have a project loaded.',
+          timing: 3
+        })
+      }
+    } catch (error) {
+      console.error('Error in Ctrl+Shift+P preview:', error)
+      notifications.notify({
+        message: 'Error opening GIF preview: ' + error.message,
+        timing: 5
+      })
+    }
+  }
+
+  // C key: Toggle new shot (only if not disabled)
+  if (e.key === 'C' || e.key === 'c') {
+    e.preventDefault()
+    if (!textInputMode) {
+      const newShotCheckbox = document.querySelector('input[name="newShot"]')
+      if (newShotCheckbox && !newShotCheckbox.disabled) {
+        toggleNewShot()
+      } else if (newShotCheckbox && newShotCheckbox.disabled) {
+        // Show notification when trying to toggle disabled new shot
+        notifications.notify({
+          message: 'New shot toggle is disabled for boards in groups (except first board)',
+          timing: 3
+        })
+      }
+    }
+  }
+
+  // Z key: Reset zoom to fit
+  if (e.key === 'Z' || e.key === 'z') {
+    e.preventDefault()
+    if (!textInputMode) {
+      // Reset zoom to center level
+      zoomIndex = ZOOM_CENTER
+      storyboarderSketchPane.zoomCenter(ZOOM_LEVELS[zoomIndex])
+      
+      // Show notification
+      notifications.notify({
+        message: 'Zoom reset to fit',
+        timing: 2
+      })
+    }
+  }
+
+  // Delete key: Delete selected boards
+  if (e.key === 'Delete') {
+    e.preventDefault()
+    if (!textInputMode) {
+      let numDeleted = deleteBoards()
+      if (numDeleted > 0) {
+        let noun = `board${numDeleted > 1 ? 's' : ''}`
+        notifications.notify({
+          message: `Deleted ${numDeleted} ${noun}.`,
+          timing: 5
+        })
+      }
+    }
+  }
+
+  // Backspace key: Delete selected boards (go forward)
+  if (e.key === 'Backspace') {
+    e.preventDefault()
+    if (!textInputMode) {
+      let numDeleted = deleteBoards(1)
+      if (numDeleted > 0) {
+        let noun = `board${numDeleted > 1 ? 's' : ''}`
+        notifications.notify({
+          message: `Deleted ${numDeleted} ${noun}.`,
+          timing: 5
+        })
+      }
+    }
+  }
+})
+
+// Expose selections to window for grouping manager access
+// Use a getter to ensure we always return the current selections
+Object.defineProperty(window, 'selections', {
+  get: function() { return selections; },
+  set: function(value) { selections = value; }
 })
 
 ipcRenderer.on('printWorksheet', (event, args) => {

@@ -30,6 +30,16 @@ const addNotification = (data) => {
   el = document.createElement('div')
   el.classList.add('notification')
   el.dataset.index = index
+  // Individual notification layout for top-left stack
+  el.style.background = 'rgba(15, 23, 42, 0.95)'
+  el.style.color = 'white'
+  el.style.borderRadius = '8px'
+  el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)'
+  el.style.overflow = 'hidden'
+  el.style.margin = '0'
+  el.style.width = 'auto'
+  el.style.maxWidth = '360px'
+  el.style.transition = 'opacity 200ms ease, height 200ms ease'
 
   if (data.onClick) el.onclick = event => {
     event.preventDefault()
@@ -38,6 +48,9 @@ const addNotification = (data) => {
 
   content = document.createElement('div')
   content.classList.add('notification-content')
+  content.style.padding = '10px 12px'
+  content.style.fontSize = '13px'
+  content.style.lineHeight = '1.35'
   content.innerHTML = 
   `
     <div>
@@ -100,6 +113,17 @@ let enabled
 const init = (el, enableNotifications) => {
   container = el
   enabled = enableNotifications
+
+  // Position container top-left instead of bottom-right
+  container.style.position = 'fixed'
+  container.style.top = '20px'
+  container.style.left = '20px'
+  container.style.right = 'auto'
+  container.style.bottom = 'auto'
+  container.style.zIndex = 3000
+  container.style.display = 'flex'
+  container.style.flexDirection = 'column'
+  container.style.gap = '8px'
 
   container.addEventListener('pointerdown', onPointerDown)
 }

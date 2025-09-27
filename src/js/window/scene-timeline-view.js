@@ -187,6 +187,13 @@ class ScaleControlView {
     this.ro.observe(this.element)
   }
 
+  disconnectedCallback () {
+    if (this.ro) {
+      this.ro.disconnect()
+      this.ro = null
+    }
+  }
+
   async onElementResize (rect) {
     // cancel any current dragging operation
     this.resetDrag()

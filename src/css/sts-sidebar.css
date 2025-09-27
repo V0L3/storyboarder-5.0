@@ -3,12 +3,18 @@
   width: 100%;
   margin: 0px;
   margin-bottom: 4px;
-  background: rgba(255,255,255,0.1);
-  border-radius: 4px;
-  border: none;
-  padding: 9px;
+  background: #3a3a3c;
+  border-radius: 6px;
+  border: 1px solid #48484a;
+  padding: 10px 12px;
   box-sizing: border-box;
-  color: white;
+  color: #ffffff;
+  transition: border-color 0.2s ease;
+}
+
+#sts-input1:focus {
+  outline: none;
+  border-color: #007aff;
 }
 
 #sts-shots {
@@ -31,7 +37,13 @@
 #sts-shots div {
   position: relative;
   overflow: hidden;
-  border-radius: 3px;
+  border-radius: 6px;
+  border: 1px solid #3a3a3c;
+  transition: border-color 0.2s ease;
+}
+
+#sts-shots div:hover {
+  border-color: #48484a;
 }
 
 

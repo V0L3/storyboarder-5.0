@@ -67,7 +67,7 @@
             </div>
             <div id="toolbar-eraser" data-group="brushes" class="button" data-tooltip
               data-tooltip-title="Eraser"
-              data-tooltip-description="Made a mistake? Use the eraser. When holding option (or alt), it will only erase the tool's layer you're on. Otherwise, will erase all layers."
+              data-tooltip-description="Made a mistake? Use the eraser. When holding option (or alt), it will only erase the toolâ€™s layer youâ€™re on. Otherwise, will erase all layers."
               data-tooltip-keys="7|Option"
               data-tooltip-position="bottom center">
               <div class="icon icon-toolbar-tool icon-toolbar-tool_eraser"></div>
@@ -89,7 +89,7 @@
                 <div class="toolbar-brush-modifier-controls">
                   <div class="toolbar-brush-modifier-controls_size" data-tooltip
                     data-tooltip-title="Brush Size"
-                    data-tooltip-description="Drag value to increase or decrease the brush size … or just use the key commands like real pros!"
+                    data-tooltip-description="Drag value to increase or decrease the brush size â€¦ or just use the key commands like real pros!"
                     data-tooltip-keys="[|]"
                     data-tooltip-position="bottom center">
                   </div>
@@ -156,7 +156,7 @@
                 Press 'f' to fill area with current brush color and opacity. Press DELETE/BACKSPACE to erase area.
               </p>
               <p>
-                Press and hold inside lasso'd area to begin moving, then drag. Fill and erase work after move also.
+                Press and hold inside lassoâ€™d area to begin moving, then drag. Fill and erase work after move also.
               </p>
               <p>
                 ENTER to commit. ESCAPE to cancel.
@@ -556,6 +556,16 @@
           <div class="stats-secondary"></div>
         </div>
         <div id="timeline-mode-control-view"></div>
+        <div id="scroll-toggle-container">
+          <div class="transport-control transport-control-scroll-toggle" data-action="toggleScrollMode" data-tooltip
+            id="scroll-toggle-tooltip"
+            data-tooltip-title="Toggle Scroll Mode"
+            data-tooltip-description="Toggle between right-click drag scrolling and left-click item movement"
+            data-tooltip-keys="S"
+            data-tooltip-position="top center">
+            <span id="scroll-toggle-text">Scroll with right-click</span>
+          </div>
+        </div>
         <div id="icons">
           <!--
           <div class="transport-control transport-control-toggle-sound" data-action="toggleSound" data-tooltip

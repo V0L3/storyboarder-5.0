@@ -5,35 +5,59 @@ const defaultLayoutPresets = {
   'standard': {
     name: 'Standard Layout',
     columns: [
-      { id: 'cut', type: 'cut-number', width: 60, label: 'Cut' },
-      { id: 'image', type: 'image', width: 300, label: 'Image' },
-      { id: 'notes', type: 'notes', width: 150, label: 'Notes' },
-      { id: 'talks', type: 'talks', width: 150, label: 'Talks' },
-      { id: 'time', type: 'time', width: 60, label: 'Time' }
+      { id: 'shot', type: 'shot-number', width: 35, label: 'Shot' },
+      { id: 'image', type: 'image', width: 500, label: 'Image' },
+      { id: 'notes', type: 'notes', width: 120, label: 'Notes' },
+      { id: 'talks', type: 'talks', width: 120, label: 'Talks' },
+      { id: 'custom-layers', type: 'custom-layers', width: 0, label: 'Custom' }, // Dynamic width
+      { id: 'focal-length', type: 'custom-field', width: 40, label: 'mm' },
+      { id: 'time', type: 'time', width: 40, label: 'Time' }
     ],
-    spacing: 15,
+    spacing: 2,
     orientation: 'landscape',
     paperSize: 'A4'
+  },
+  'japanese-storyboard': {
+    name: 'Japanese Storyboard (絵コンテ)',
+    columns: [
+      { id: 'shot', type: 'shot-number', width: 35, label: 'ショット' },
+      { id: 'image', type: 'image', width: 520, label: '画' },
+      { id: 'notes', type: 'notes', width: 110, label: '内' },
+      { id: 'talks', type: 'talks', width: 110, label: '容' },
+      { id: 'time', type: 'time', width: 40, label: '秒' }
+    ],
+    spacing: 2,
+    orientation: 'landscape',
+    paperSize: 'A4',
+    aspectRatio: '2.39:1',
+    showAspectRatio: true,
+    headerText: 'STORYBOARD',
+    headerSubtext: '絵コンテ',
+    imagePlaceholder: 'placeholder image',
+    notesPlaceholder: 'Write action notes here',
+    talksPlaceholder: 'Dialogue / sound notes',
+    timeFormat: '00\''
   },
   'detailed': {
     name: 'Detailed Layout',
     columns: [
-      { id: 'cut', type: 'cut-number', width: 50, label: 'Cut' },
-      { id: 'image', type: 'image', width: 250, label: 'Image' },
-      { id: 'notes', type: 'notes', width: 120, label: 'Notes' },
-      { id: 'dialogue', type: 'dialogue', width: 120, label: 'Dialogue' },
-      { id: 'action', type: 'action', width: 120, label: 'Action' },
-      { id: 'focal-length', type: 'custom-field', width: 80, label: 'Focal Length' },
-      { id: 'time', type: 'time', width: 50, label: 'Time' }
+      { id: 'shot', type: 'shot-number', width: 35, label: 'Shot' },
+      { id: 'image', type: 'image', width: 500, label: 'Image' },
+      { id: 'notes', type: 'notes', width: 90, label: 'Notes' },
+      { id: 'dialogue', type: 'dialogue', width: 90, label: 'Dialogue' },
+      { id: 'action', type: 'action', width: 90, label: 'Action' },
+      { id: 'custom-layers', type: 'custom-layers', width: 0, label: 'Custom' }, // Dynamic width
+      { id: 'focal-length', type: 'custom-field', width: 40, label: 'mm' },
+      { id: 'time', type: 'time', width: 40, label: 'Time' }
     ],
-    spacing: 10,
+    spacing: 2,
     orientation: 'landscape',
     paperSize: 'A4'
   },
   'compact': {
     name: 'Compact Layout',
     columns: [
-      { id: 'cut', type: 'cut-number', width: 40, label: 'Cut' },
+      { id: 'shot', type: 'shot-number', width: 40, label: 'Shot' },
       { id: 'image', type: 'image', width: 200, label: 'Image' },
       { id: 'notes', type: 'notes', width: 100, label: 'Notes' },
       { id: 'time', type: 'time', width: 40, label: 'Time' }
@@ -45,8 +69,8 @@ const defaultLayoutPresets = {
 }
 
 const columnTypes = {
-  'cut-number': {
-    name: 'Cut Number',
+  'shot-number': {
+    name: 'Shot Number',
     description: 'Sequential board number',
     renderable: true,
     customizable: false
@@ -96,6 +120,12 @@ const columnTypes = {
   'custom-field': {
     name: 'Custom Field',
     description: 'User-defined field',
+    renderable: true,
+    customizable: true
+  },
+  'custom-layers': {
+    name: 'Custom Layers',
+    description: 'Dynamic custom layers added by user',
     renderable: true,
     customizable: true
   }

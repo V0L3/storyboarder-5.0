@@ -3,54 +3,261 @@
   <head>
     <meta charset="UTF-8">
     <link rel="stylesheet" href="./css/fonts.css">
-    <link rel="stylesheet" href="./css/welcome.css">
     <title>New</title>
     
     <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        background: #0f172a;
+        color: #f8fafc;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        line-height: 1.6;
+        overflow: hidden;
+        user-select: none;
+        -webkit-user-select: none;
+        cursor: default;
+      }
+
       #new-window {
-        line-height: 1.4;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      }
+
+      #close-button {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        color: #cbd5e1;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        z-index: 20;
+        font-size: 18px;
+        font-weight: bold;
+      }
+
+      #close-button:hover {
+        background: rgba(255, 255, 255, 0.2);
+        color: #f8fafc;
+        transform: scale(1.05);
       }
 
       .tab {
         display: none;
+        flex: 1;
+        padding: 20px 30px 15px;
+        overflow: hidden;
+        width: 100%;
+        height: 100%;
       }
+
+      .tab h1 {
+        font-size: 22px;
+        font-weight: 700;
+        color: #f8fafc;
+        margin: 0 0 15px 0;
+        text-align: center;
+        line-height: 1.2;
+      }
+
+      .flex-column {
+        display: flex;
+        gap: 15px;
+        width: 100%;
+        max-width: 1000px;
+        margin: 0 auto 15px auto;
+        height: calc(100vh - 150px);
+      }
+
+      .column {
+        flex: 1;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
+        padding: 20px;
+        min-height: 0;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+
+      .column::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+        transition: left 0.5s ease;
+      }
+
+      .column:hover {
+        background: rgba(99, 102, 241, 0.1);
+        border-color: #6366f1;
+        transform: translateY(-4px) scale(1.02);
+        box-shadow: 0 12px 35px rgba(99, 102, 241, 0.2);
+      }
+
+      .column:hover::before {
+        left: 100%;
+      }
+
+      .column:active {
+        transform: translateY(-2px) scale(1.01);
+        box-shadow: 0 8px 25px rgba(99, 102, 241, 0.15);
+      }
+
+      .column h3 {
+        font-size: 18px;
+        font-weight: 700;
+        color: #f8fafc;
+        margin: 0 0 12px 0;
+        position: relative;
+      }
+
+      .column h3::after {
+        content: '→';
+        position: absolute;
+        right: 0;
+        top: 0;
+        font-size: 18px;
+        color: #6366f1;
+        opacity: 0;
+        transition: all 0.3s ease;
+        transform: translateX(-10px);
+      }
+
+      .column:hover h3::after {
+        opacity: 1;
+        transform: translateX(0);
+      }
+
+      .column span {
+        font-size: 13px;
+        color: #cbd5e1;
+        line-height: 1.4;
+        display: block;
+      }
+
+      .column::after {
+        content: 'Click to select';
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        font-size: 12px;
+        color: #6366f1;
+        font-weight: 500;
+        opacity: 0;
+        transition: all 0.3s ease;
+        transform: translateY(10px);
+      }
+
+      .column:hover::after {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      /* Button styles removed - using clickable surfaces instead */
 
       .examples {
         display: grid;
         grid-template-columns: repeat(7, 1fr);
-        grid-gap: 0;
+        grid-gap: 16px;
+        max-width: 1000px;
+        margin: 0 auto;
       }
-      .examples > div {
+
+      .example {
         display: flex;
         flex-direction: column;
         justify-content: flex-end;
-        border-radius: 6px;
-        padding: 12px 6px;
-      }
-      .examples > div:hover {
-        background-color: #efefef;
-      }
-      .examples > div > div:not(:last-child) {
+        border-radius: 12px;
+        padding: 16px 12px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        cursor: pointer;
+        transition: all 0.3s ease;
         text-align: center;
-        font-size: 13px;
-        /*flex: 1;*/
       }
-      .examples > div > div:last-child {
+
+      .example:hover {
+        background: rgba(99, 102, 241, 0.1);
+        border-color: #6366f1;
+        transform: translateY(-4px) scale(1.02);
+        box-shadow: 0 8px 25px rgba(99, 102, 241, 0.2);
+      }
+
+      .example > div:not(:last-child) {
+        text-align: center;
+        font-size: 14px;
+        font-weight: 600;
+        color: #f8fafc;
+        margin-bottom: 8px;
+      }
+
+      .example > div:last-child {
         padding-top: 10px;
         flex: 1;
       }
+
       .example-display {
-        background: #3a3a3a;
+        background: #334155;
         width: 100%;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
       }
 
       #aspect-description {
         font-size: 15px;
+        color: #cbd5e1;
+        line-height: 1.6;
+        text-align: center;
+        max-width: 800px;
+        margin: 40px auto 0;
       }
 
       #script-based-description,
       #blank-description {
         font-size: 15px;
+      }
+
+      @media (max-width: 768px) {
+        .flex-column {
+          flex-direction: column;
+          gap: 20px;
+        }
+        
+        .examples {
+          grid-template-columns: repeat(3, 1fr);
+        }
+        
+        .tab {
+          padding: 40px 20px 20px;
+        }
+        
+        .tab h1 {
+          font-size: 24px;
+        }
       }
     </style>
   </head>
@@ -59,10 +266,10 @@
       <div id="close-button">&#10005;</div>
 
       <div class="tab">
-        <h1 style="margin-top: 50px; line-height: 1" id="creation-title">There are 2 ways to create a new storyboard. Which would you like?</h1>
+        <h1 style="margin-top: 10px; line-height: 1" id="creation-title">There are 2 ways to create a new storyboard. Which would you like?</h1>
 
         <div class="flex-column">
-          <div class="column">
+          <div class="column" id="new-script">
             <h3 id="script-based-title">Based on a script</h3>
             <span id="script-based-description">
               If you are working on a story with a script, you can specify the
@@ -72,8 +279,7 @@
               or Final Draft (.fdx) format.
             </span>
           </div>
-          <div style="padding: 20px; width: 20px; align-self: center;"></div>
-          <div class="column">
+          <div class="column" id="new-blank">
             <h3 id="blank-title">Blank Storyboard</h3>
             <span id="blank-description">
               You can simply create a totally blank storyboard. Just make boards 
@@ -84,15 +290,7 @@
           </div>
         </div>
 
-        <div class="flex-column" style="margin-top: 40px;">
-          <div class="column">
-            <div class="button grey" id="new-script">Select Script...</div>
-          </div>
-          <div style="padding: 20px; width: 20px; align-self: center;"></div>
-          <div class="column">
-            <div class="button grey" id="new-blank">Create a blank...</div>
-          </div>
-        </div>
+        <!-- Buttons removed - surfaces are now clickable -->
       </div>
 
       <div class="tab">

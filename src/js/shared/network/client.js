@@ -1,6 +1,6 @@
 import {RestrictedActions, remoteStore} from "../reducers/remoteDevice"
 import {_blockObject as blockObjectAction, _unblockObject as unblockObjectAction, getSelections} from "../reducers/shot-generator"
-import P2P from './p2p'
+const P2P = require('./p2p')
 import EventEmmiter from 'events'
 
 // Helper function to call some fn once per N calls

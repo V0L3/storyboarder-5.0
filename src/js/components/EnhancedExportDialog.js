@@ -24,6 +24,66 @@ class EnhancedExportDialog {
     this.loadDefaultLayout()
   }
 
+  showInputDialog(message, title, callback) {
+    // Remove existing input dialog if present
+    const existing = document.querySelector('#input-dialog')
+    if (existing) existing.remove()
+
+    const dialog = document.createElement('div')
+    dialog.id = 'input-dialog'
+    dialog.className = 'input-dialog-overlay'
+    dialog.innerHTML = `
+      <div class="input-dialog-container">
+        <div class="input-dialog-header">
+          <h3>${title}</h3>
+          <button class="input-dialog-close">&times;</button>
+        </div>
+        <div class="input-dialog-content">
+          <p>${message}</p>
+          <input type="text" id="input-dialog-field" placeholder="Enter value..." autofocus>
+        </div>
+        <div class="input-dialog-actions">
+          <button id="input-dialog-cancel" class="btn btn-secondary">Cancel</button>
+          <button id="input-dialog-ok" class="btn btn-primary">OK</button>
+        </div>
+      </div>
+    `
+
+    document.body.appendChild(dialog)
+
+    const input = dialog.querySelector('#input-dialog-field')
+    const okBtn = dialog.querySelector('#input-dialog-ok')
+    const cancelBtn = dialog.querySelector('#input-dialog-cancel')
+    const closeBtn = dialog.querySelector('.input-dialog-close')
+
+    const cleanup = () => {
+      document.body.removeChild(dialog)
+    }
+
+    const handleOk = () => {
+      const value = input.value.trim()
+      cleanup()
+      if (callback) callback(value)
+    }
+
+    const handleCancel = () => {
+      cleanup()
+      if (callback) callback(null)
+    }
+
+    okBtn.addEventListener('click', handleOk)
+    cancelBtn.addEventListener('click', handleCancel)
+    closeBtn.addEventListener('click', handleCancel)
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') handleOk()
+      if (e.key === 'Escape') handleCancel()
+    })
+
+    // Focus the input field
+    setTimeout(() => input.focus(), 100)
+  }
+
   createDialog() {
     // Remove existing dialog if present
     const existing = document.querySelector('#enhanced-export-dialog')
@@ -106,8 +166,8 @@ class EnhancedExportDialog {
                   <div class="option-group">
                     <h5>Standard Fields</h5>
                     <label class="checkbox-option">
-                      <input type="checkbox" id="include-cut-numbers" checked>
-                      Include cut numbers
+                      <input type="checkbox" id="include-shot-numbers" checked>
+                      Include shot numbers
                     </label>
                     <label class="checkbox-option">
                       <input type="checkbox" id="include-images" checked>
@@ -208,6 +268,7 @@ class EnhancedExportDialog {
                       <label>Export Format:</label>
                       <select id="export-format">
                         <option value="pdf">PDF Document</option>
+                        <option value="html">HTML Document</option>
                         <option value="images">Individual Images</option>
                         <option value="both">Both PDF and Images</option>
                       </select>
@@ -257,6 +318,11 @@ class EnhancedExportDialog {
                     </div>
                   </div>
                 </div>
+                
+                <div class="form-group">
+                  <label>Author Name:</label>
+                  <input type="text" id="author-name" placeholder="Enter author name for copyright">
+                </div>
               </div>
             </div>
           </div>
@@ -281,6 +347,25 @@ class EnhancedExportDialog {
   }
 
   attachEventListeners() {
+    // Prevent F12 and other dev tools shortcuts from bubbling up
+    this.dialog.addEventListener('keydown', (e) => {
+      // Prevent F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U, etc.
+      if (e.key === 'F12' || 
+          (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) ||
+          (e.ctrlKey && e.key === 'u')) {
+        e.preventDefault()
+        e.stopPropagation()
+        return false
+      }
+    })
+
+    // Prevent right-click context menu
+    this.dialog.addEventListener('contextmenu', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      return false
+    })
+
     // Tab switching
     this.dialog.addEventListener('click', (e) => {
       if (e.target.classList.contains('tab-button')) {
@@ -440,7 +525,7 @@ class EnhancedExportDialog {
 
   getColumnPreviewColor(type) {
     const colors = {
-      'cut-number': '#e3f2fd',
+      'shot-number': '#e3f2fd',
       'image': '#f3e5f5',
       'notes': '#fff3e0',
       'dialogue': '#e8f5e8',
@@ -489,13 +574,14 @@ class EnhancedExportDialog {
   }
 
   createNewLayout() {
-    const name = prompt('Enter layout name:')
-    if (name) {
-      const layout = this.layoutManager.createLayout(name)
-      this.currentLayout = layout.id
-      this.updateLayoutTemplateSelect()
-      this.updateLayoutPreview()
-    }
+    this.showInputDialog('Enter layout name:', 'Create New Layout', (name) => {
+      if (name) {
+        const layout = this.layoutManager.createLayout(name)
+        this.currentLayout = layout.id
+        this.updateLayoutTemplateSelect()
+        this.updateLayoutPreview()
+      }
+    })
   }
 
   updateLayoutTemplateSelect() {
@@ -538,12 +624,14 @@ class EnhancedExportDialog {
   }
 
   addCustomField() {
-    const name = prompt('Enter field name:')
-    if (name) {
-      const defaultValue = prompt('Enter default value (optional):') || ''
-      this.layoutManager.addCustomField(name, defaultValue)
-      this.updateCustomFieldsList()
-    }
+    this.showInputDialog('Enter field name:', 'Add Custom Field', (name) => {
+      if (name) {
+        this.showInputDialog('Enter default value (optional):', 'Default Value', (defaultValue) => {
+          this.layoutManager.addCustomField(name, defaultValue || '')
+          this.updateCustomFieldsList()
+        })
+      }
+    })
   }
 
   updateGifGroupsList() {
@@ -581,7 +669,7 @@ class EnhancedExportDialog {
       
       // Content options
       includeFields: {
-        cutNumbers: this.dialog.querySelector('#include-cut-numbers').checked,
+        shotNumbers: this.dialog.querySelector('#include-shot-numbers').checked,
         images: this.dialog.querySelector('#include-images').checked,
         notes: this.dialog.querySelector('#include-notes').checked,
         dialogue: this.dialog.querySelector('#include-dialogue').checked,
@@ -606,6 +694,11 @@ class EnhancedExportDialog {
         quality: parseInt(this.dialog.querySelector('#gif-quality').value),
         maxWidth: parseInt(this.dialog.querySelector('#gif-max-width').value)
       },
+
+      // Video group options
+      includeVideos: true, // Always include video groups in export
+      videoGroups: this.gifGroupManager ? this.gifGroupManager.videoGroupManager.getAllGroups().map(group => group.id) : [],
+      groupData: this.gifGroupManager ? this.gifGroupManager.videoGroupManager.getAllGroups() : [],
       
       // Export settings
       exportFormat: this.dialog.querySelector('#export-format').value,
@@ -617,7 +710,10 @@ class EnhancedExportDialog {
       // Watermark
       includeWatermark: this.dialog.querySelector('#include-watermark').checked,
       watermarkText: this.dialog.querySelector('#watermark-text').value,
-      watermarkOpacity: parseInt(this.dialog.querySelector('#watermark-opacity').value)
+      watermarkOpacity: parseInt(this.dialog.querySelector('#watermark-opacity').value),
+      
+      // Author
+      authorName: this.dialog.querySelector('#author-name').value
     }
     
     return config
@@ -730,8 +826,15 @@ class EnhancedExportDialog {
     for (const groupId of groupIds) {
       const group = this.layoutManager.getGifGroup(groupId)
       if (group) {
-        // Generate GIF for this group
-        // This would integrate with the existing exporter
+        // Only use the FIRST board in the group for GIF generation
+        const firstBoardIndex = group.boardIndices[0]
+        const firstBoard = this.boardData.boards[firstBoardIndex]
+        
+        if (firstBoard) {
+          // Generate GIF for this group using only the first board
+          // This would integrate with the existing exporter
+          console.log('Generating GIF for group using first board:', firstBoardIndex)
+        }
       }
     }
   }

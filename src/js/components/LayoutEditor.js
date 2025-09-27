@@ -21,6 +21,68 @@ class LayoutEditor {
     this.attachEventListeners()
   }
 
+  showInputDialog(message, title, defaultValue = '') {
+    return new Promise((resolve) => {
+      // Remove existing input dialog if present
+      const existing = document.querySelector('#input-dialog')
+      if (existing) existing.remove()
+
+      const dialog = document.createElement('div')
+      dialog.id = 'input-dialog'
+      dialog.className = 'input-dialog-overlay'
+      dialog.innerHTML = `
+        <div class="input-dialog-container">
+          <div class="input-dialog-header">
+            <h3>${title}</h3>
+            <button class="input-dialog-close">&times;</button>
+          </div>
+          <div class="input-dialog-content">
+            <p>${message}</p>
+            <input type="text" id="input-dialog-field" placeholder="Enter value..." value="${defaultValue}" autofocus>
+          </div>
+          <div class="input-dialog-actions">
+            <button id="input-dialog-cancel" class="btn btn-secondary">Cancel</button>
+            <button id="input-dialog-ok" class="btn btn-primary">OK</button>
+          </div>
+        </div>
+      `
+
+      document.body.appendChild(dialog)
+
+      const input = dialog.querySelector('#input-dialog-field')
+      const okBtn = dialog.querySelector('#input-dialog-ok')
+      const cancelBtn = dialog.querySelector('#input-dialog-cancel')
+      const closeBtn = dialog.querySelector('.input-dialog-close')
+
+      const cleanup = () => {
+        document.body.removeChild(dialog)
+      }
+
+      const handleOk = () => {
+        const value = input.value.trim()
+        cleanup()
+        resolve(value)
+      }
+
+      const handleCancel = () => {
+        cleanup()
+        resolve(null)
+      }
+
+      okBtn.addEventListener('click', handleOk)
+      cancelBtn.addEventListener('click', handleCancel)
+      closeBtn.addEventListener('click', handleCancel)
+
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') handleOk()
+        if (e.key === 'Escape') handleCancel()
+      })
+
+      // Focus the input field
+      setTimeout(() => input.focus(), 100)
+    })
+  }
+
   getHTML() {
     return `
       <div class="layout-editor">
@@ -94,8 +156,8 @@ class LayoutEditor {
     })
 
     // New layout button
-    this.container.querySelector('#new-layout-btn').addEventListener('click', () => {
-      const name = prompt('Enter layout name:')
+    this.container.querySelector('#new-layout-btn').addEventListener('click', async () => {
+      const name = await this.showInputDialog('Enter layout name:', 'Create Layout')
       if (name) {
         const layout = this.layoutManager.createLayout(name)
         this.loadLayout(layout.id)
@@ -437,11 +499,11 @@ class LayoutEditor {
     })
   }
 
-  editColumn(index) {
+  async editColumn(index) {
     const column = this.currentLayout.columns[index]
     if (!column) return
 
-    const newLabel = prompt('Enter new label:', column.label)
+    const newLabel = await this.showInputDialog('Enter new label:', 'Edit Column Label', column.label)
     if (newLabel && newLabel !== column.label) {
       column.label = newLabel
       this.renderColumns()

@@ -185,11 +185,32 @@ class Exporter {
     })
   }
 
-  async exportAnimatedGif (boards, boardSize, destWidth, projectFileAbsolutePath, mark, boardData, watermarkSrc = './img/watermark.png') {
+  async exportAnimatedGif (boards, boardSize, destWidth, projectFileAbsolutePath, mark, boardData, watermarkSrc = './img/watermark.png', customFilename = null) {
+    console.log(`[Exporter.exportAnimatedGif] Board size:`, boardSize)
+    console.log(`[Exporter.exportAnimatedGif] Dest width:`, destWidth)
+    
+    // Validate board size
+    if (!boardSize || !boardSize.width || !boardSize.height || boardSize.height === 0) {
+      console.error(`[Exporter.exportAnimatedGif] Invalid board size:`, boardSize)
+      // Use default size if board size is invalid
+      boardSize = { width: 1920, height: 1080 }
+      console.log(`[Exporter.exportAnimatedGif] Using default board size:`, boardSize)
+    }
+    
     let aspect = boardSize.height / boardSize.width
     let destSize = {
       width: destWidth,
       height: Math.floor(destWidth * aspect)
+    }
+    
+    console.log(`[Exporter.exportAnimatedGif] Aspect ratio:`, aspect)
+    console.log(`[Exporter.exportAnimatedGif] Dest size:`, destSize)
+    
+    // Validate dest size
+    if (destSize.height <= 0) {
+      console.error(`[Exporter.exportAnimatedGif] Invalid dest height: ${destSize.height}`)
+      destSize.height = Math.floor(destWidth * 0.5625) // 16:9 aspect ratio fallback
+      console.log(`[Exporter.exportAnimatedGif] Using fallback height: ${destSize.height}`)
     }
     const fragmentText = (ctx, text, maxWidth) => {
       let words = text.split(' ')
@@ -223,6 +244,9 @@ class Exporter {
 
     const watermarkImage = await getImage(watermarkSrc)
 
+    // Use high-DPI canvas rendering for crisp quality
+    console.log(`[Exporter.exportAnimatedGif] Rendering with high-DPI canvas: ${destSize.width}x${destSize.height}`)
+    
     const canvases = await Promise.all(
       boards.map(async (board) =>
         // returns a Promise
@@ -237,20 +261,48 @@ class Exporter {
 
     let encoder = new GIFEncoder(destSize.width, destSize.height)
 
-    // save in the exports directory
-    let exportsPath = ensureExportsPathExists(projectFileAbsolutePath)
-    let basename = path.basename(projectFileAbsolutePath, path.extname(projectFileAbsolutePath))
-    let filepath = path.join(
-      exportsPath,
-      basename + ' ' + moment().format('YYYY-MM-DD hh.mm.ss') + '.gif'
-    )
+    // save in the gifs directory
+    let projectDir = path.dirname(projectFileAbsolutePath)
+    let gifsPath = path.join(projectDir, 'gifs')
+    
+    // Create gifs directory if it doesn't exist
+    if (!fs.existsSync(gifsPath)) {
+      fs.mkdirSync(gifsPath, { recursive: true })
+    }
+    
+    let filepath
+    if (customFilename) {
+      // Use custom filename (just the group name)
+      filepath = path.join(gifsPath, customFilename + '.gif')
+    } else {
+      // Fallback to original naming for backward compatibility
+      let basename = path.basename(projectFileAbsolutePath, path.extname(projectFileAbsolutePath))
+      filepath = path.join(
+        gifsPath,
+        basename + ' ' + moment().format('YYYY-MM-DD HH.mm.ss') + '.gif'
+      )
+    }
 
-    encoder.createReadStream().pipe(fs.createWriteStream(filepath))
-    encoder.start()
-    encoder.setRepeat(0) // 0 for repeat, -1 for no-repeat
-    encoder.setDelay(boardData.defaultBoardTiming) // frame delay in ms
-    encoder.setQuality(10) // image quality. 10 is default.
-    for (var i = 0; i < boards.length; i++) {
+    console.log(`[Exporter.exportAnimatedGif] Exporting GIF to: ${filepath}`)
+    console.log(`[Exporter.exportAnimatedGif] Gifs path exists: ${fs.existsSync(gifsPath)}`)
+    console.log(`[Exporter.exportAnimatedGif] Project file: ${projectFileAbsolutePath}`)
+
+    try {
+      const writeStream = fs.createWriteStream(filepath)
+      encoder.createReadStream().pipe(writeStream)
+      
+      // Handle write stream errors
+      writeStream.on('error', (error) => {
+        console.error(`[Exporter.exportAnimatedGif] Write stream error:`, error)
+        throw error
+      })
+      
+      encoder.start()
+      encoder.setRepeat(0) // 0 for repeat, -1 for no-repeat
+      encoder.setDelay(boardData.defaultBoardTiming) // frame delay in ms
+      encoder.setQuality(10) // image quality. 10 is default.
+      
+      for (var i = 0; i < boards.length; i++) {
       let canvas = canvases[i]
       let context = canvas.getContext('2d')
       if (mark) {
@@ -300,8 +352,8 @@ class Exporter {
           outlinecontext.lineJoin = 'round'
           outlinecontext.strokeStyle = 'rgba(0,0,0,1)'
           let padding = 35
-          outlinecontext.fillRect((destWidth / 2) - textWidth - (padding / 2), xOffset - (6) - (padding / 2), textWidth * 2 + padding, padding)
-          outlinecontext.strokeRect((destWidth / 2) - textWidth - (padding / 2), xOffset - (6) - (padding / 2), textWidth * 2 + padding, padding)
+          outlinecontext.fillRect((destSize.width / 2) - textWidth - (padding / 2), xOffset - (6) - (padding / 2), textWidth * 2 + padding, padding)
+          outlinecontext.strokeRect((destSize.width / 2) - textWidth - (padding / 2), xOffset - (6) - (padding / 2), textWidth * 2 + padding, padding)
 
           // outlinecontext.beginPath()
           // outlinecontext.moveTo((destWidth/2)-textWidth, xOffset-(6))
@@ -317,10 +369,10 @@ class Exporter {
           let xOffset = (i + 1) * (fontSize + 6) + (destSize.height - ((lines.length + 1) * (fontSize + 6))) - 20
           context.lineWidth = 4
           context.strokeStyle = 'rgba(0,0,0,0.8)'
-          context.strokeText(line.trim(), destWidth / 2, xOffset)
+          context.strokeText(line.trim(), destSize.width / 2, xOffset)
           context.strokeStyle = 'rgba(0,0,0,0.2)'
-          context.strokeText(line.trim(), destWidth / 2, xOffset + 2)
-          context.fillText(line.trim(), destWidth / 2, xOffset)
+          context.strokeText(line.trim(), destSize.width / 2, xOffset + 2)
+          context.fillText(line.trim(), destSize.width / 2, xOffset)
         })
       }
       let duration
@@ -333,8 +385,14 @@ class Exporter {
       encoder.addFrame(context)
     }
     encoder.finish()
-
+    
+    console.log(`[Exporter.exportAnimatedGif] Successfully created GIF: ${filepath}`)
     return filepath
+    
+    } catch (error) {
+      console.error(`[Exporter.exportAnimatedGif] Error creating GIF:`, error)
+      throw error
+    }
   }
 
   async exportVideo (scene, sceneFilePath, opts) {

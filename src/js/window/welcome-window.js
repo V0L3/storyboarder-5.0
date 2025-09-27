@@ -23,10 +23,21 @@ i18n.on('loaded', (loaded) => {
 })
 
 const updateHTMLText = () => {
-  document.querySelector('.recent').innerHTML = i18n.t("welcome-window.recentStoryboards")
-  document.querySelector('#getting-started').innerHTML = i18n.t("menu.help.getting-started")
-  document.querySelector('#new-storyboard').innerHTML = i18n.t("welcome-window.new-storyboard")
-  document.querySelector('#open-storyboard').innerHTML = i18n.t("menu.file.open")
+  // Update section title
+  const sectionTitle = document.querySelector('.section-title')
+  if(sectionTitle) sectionTitle.innerHTML = i18n.t("welcome-window.recentStoryboards")
+  
+  // Update button titles
+  const gettingStartedBtn = document.querySelector('#getting-started .btn-title')
+  if(gettingStartedBtn) gettingStartedBtn.innerHTML = i18n.t("menu.help.getting-started")
+  
+  const newStoryboardBtn = document.querySelector('#new-storyboard .btn-title')
+  if(newStoryboardBtn) newStoryboardBtn.innerHTML = i18n.t("welcome-window.new-storyboard")
+  
+  const openStoryboardBtn = document.querySelector('#open-storyboard .btn-title')
+  if(openStoryboardBtn) openStoryboardBtn.innerHTML = i18n.t("menu.file.open")
+  
+  // Update welcome text
   let welcomeLine1 = document.querySelector('#welcome-line-1')
   if(welcomeLine1) welcomeLine1.innerHTML = i18n.t("welcome-window.welcome-line-1")
   let welcomeLine2 = document.querySelector('#welcome-line-2')
@@ -86,20 +97,31 @@ let updateRecentDocuments = () => {
   let recentDocuments = prefsModule.getPrefs('welcome')['recentDocuments']
   console.log(recentDocuments)
   if (recentDocuments && recentDocuments.length>0) {
+    // Hide welcome content and show recent files
+    const welcomeContent = document.querySelector('#welcome')
+    if (welcomeContent) {
+      welcomeContent.style.display = 'none'
+    }
+    
     for (var recentDocument of recentDocuments) {
+      // Limit to 8 recent projects maximum
+      if (count >= 8) {
+        break
+      }
+      
       html.push(`<div class="recent-item" data-filename="${recentDocument.filename}"><img src="./img/fileicon.png" draggable="false"><div class="text">`)
       let filename = recentDocument.filename.split(path.sep)
       filename = filename[filename.length-1]
       html.push(`<h2>${recentDocument.title}</h2>`)
 
       let lastUpdated = moment(recentDocument.time).fromNow().toUpperCase()
-      html.push(lastUpdated) // `// ${util.msToTime(recentDocument.totalMovieTime)} / ${recentDocument.totalPageCount} PAGES / ${String(recentDocument.totalWordCount).replace(/\B(?=(\d{3})+(?!\d))/g, ",")} WORDS`)
+      html.push(`<div>${lastUpdated}</div>`)
 
       html.push('</div></div>')
       count++
     }
     document.querySelector('#recent').innerHTML = html.join('')
-    document.querySelector('.recent').innerHTML = i18n.t("welcome-window.recentStoryboards")
+    
     let recentDivs = document.querySelector("#recent").children
     for (var i = 0; i < recentDivs.length; i++) {
       recentDivs[i].onclick = (e)=>{
@@ -108,6 +130,12 @@ let updateRecentDocuments = () => {
       }
       recentDivs[i].addEventListener("mouseenter", ()=>{sfx.rollover()})
       recentDivs[i].addEventListener("pointerdown", ()=>{sfx.down()})
+    }
+  } else {
+    // Show welcome content when no recent files
+    const welcomeContent = document.querySelector('#welcome')
+    if (welcomeContent) {
+      welcomeContent.style.display = 'block'
     }
   }
   document.querySelector('#recent').scrollTop = 0
@@ -121,48 +149,75 @@ document.querySelector('#close-button').onclick = () => {
   window.close()
 }
 
-document.querySelector('iframe').onload = ()=>{
-  Array.prototype.slice.call(document.querySelector('iframe').contentDocument.getElementsByTagName('a')).forEach((element)=>{
-    element.onclick = (e)=> {
-      shell.openExternal(e.currentTarget.href)
-      e.preventDefault()
+// Handle iframe setup only if it exists and is visible
+const iframe = document.querySelector('iframe')
+if (iframe) {
+  iframe.onload = ()=>{
+    try {
+      Array.prototype.slice.call(iframe.contentDocument.getElementsByTagName('a')).forEach((element)=>{
+        element.onclick = (e)=> {
+          shell.openExternal(e.currentTarget.href)
+          e.preventDefault()
+        }
+        element.addEventListener("mouseover", ()=>{sfx.rollover()})
+        element.addEventListener("pointerdown", ()=>{sfx.down()})
+      })
+
+      // handle dropping a file onto the iframe
+      let contentDocument = iframe.contentDocument
+      contentDocument.ondragover = () => { return false }
+      contentDocument.ondragleave = () => { return false }
+      contentDocument.ondragend = () => { return false }
+      contentDocument.ondrop = onFileDrop
+    } catch (error) {
+      console.warn('Could not access iframe content:', error)
     }
-    element.addEventListener("mouseover", ()=>{sfx.rollover()})
-    element.addEventListener("pointerdown", ()=>{sfx.down()})
-  })
-
-  // handle dropping a file onto the iframe
-  let contentDocument = document.querySelector('iframe').contentDocument
-  contentDocument.ondragover = () => { return false }
-  contentDocument.ondragleave = () => { return false }
-  contentDocument.ondragend = () => { return false }
-  contentDocument.ondrop = onFileDrop
-}
-document.querySelector('iframe').src = "https://wonderunit.com/ads/storyboarder?" + Math.round(Date.now() / 1000 / 60 / 6)
-
-document.querySelector('#getting-started').onclick = event => {
-  event.preventDefault()
-  shell.openExternal("https://wonderunit.com/storyboarder/faq/#How-do-I-get-started")
+  }
+  iframe.src = "https://wonderunit.com/ads/storyboarder?" + Math.round(Date.now() / 1000 / 60 / 6)
 }
 
-document.querySelector('#open-storyboard').onclick = ()=> {
-  document.querySelector('#open-storyboard').style.pointerEvents = 'none'
-  setTimeout(()=>{document.querySelector('#open-storyboard').style.pointerEvents = 'auto'}, 1000)
-  ipcRenderer.send('openDialogue')
+// Set up button event listeners with error handling
+const setupButtonListeners = () => {
+  const gettingStartedBtn = document.querySelector('#getting-started')
+  const openStoryboardBtn = document.querySelector('#open-storyboard')
+  const newStoryboardBtn = document.querySelector('#new-storyboard')
+
+  if (gettingStartedBtn) {
+    gettingStartedBtn.onclick = event => {
+      event.preventDefault()
+      shell.openExternal("https://wonderunit.com/storyboarder/faq/#How-do-I-get-started")
+    }
+    gettingStartedBtn.addEventListener("mouseover", ()=>{sfx.rollover()})
+    gettingStartedBtn.addEventListener("pointerdown", ()=>{sfx.error()})
+  }
+
+  if (openStoryboardBtn) {
+    openStoryboardBtn.onclick = ()=> {
+      openStoryboardBtn.style.pointerEvents = 'none'
+      setTimeout(()=>{openStoryboardBtn.style.pointerEvents = 'auto'}, 1000)
+      ipcRenderer.send('openDialogue')
+    }
+    openStoryboardBtn.addEventListener("mouseover", ()=>{sfx.rollover()})
+    openStoryboardBtn.addEventListener("pointerdown", ()=>{sfx.down()})
+  }
+
+  if (newStoryboardBtn) {
+    newStoryboardBtn.onclick = ()=> {
+      ipcRenderer.send('openNewWindow')
+    }
+    newStoryboardBtn.addEventListener("mouseover", ()=>{sfx.rollover()})
+    newStoryboardBtn.addEventListener("pointerdown", ()=>{sfx.positive()})
+  }
 }
 
-document.querySelector('#new-storyboard').onclick = ()=> {
-  ipcRenderer.send('openNewWindow')
+// Set up button listeners when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', setupButtonListeners)
+} else {
+  setupButtonListeners()
 }
 
-document.querySelector('#getting-started').addEventListener("mouseover", ()=>{sfx.rollover()})
-document.querySelector('#open-storyboard').addEventListener("mouseover", ()=>{sfx.rollover()})
-document.querySelector('#new-storyboard' ).addEventListener("mouseover", ()=>{sfx.rollover()})
-document.querySelector('#getting-started').addEventListener("pointerdown", ()=>{sfx.error()})
-document.querySelector('#open-storyboard').addEventListener("pointerdown", ()=>{sfx.down()})
-document.querySelector('#new-storyboard' ).addEventListener("pointerdown", ()=>{sfx.positive()})
-
-document.querySelector("span[data-js='version-number']").innerHTML = ` v${pkg.version}`
+document.querySelector("span[data-js='version-number']").innerHTML = pkg.version
 
 ipcRenderer.on('playsfx', (event, args)=>{
   switch (args) {

@@ -11,7 +11,7 @@ import {
   getRemoteDevices,
   SelectActions
 } from '../../shared/reducers/remoteDevice'
-import P2P from '../../shared/network/p2p'
+const P2P = require('../../shared/network/p2p')
 
 import {loadFileToBlob} from '../../shared/network/peerUtils'
 

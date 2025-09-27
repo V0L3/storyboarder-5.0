@@ -360,6 +360,78 @@ app.on('activate', ()=> {
   if (!mainWindow && !welcomeWindow) openWelcomeWindow()
 })
 
+// Global reference to the enhanced export window
+let enhancedExportWindow = null
+
+let openEnhancedExportWindow = (data) => {
+  // If window already exists, focus it and send new data
+  if (enhancedExportWindow && !enhancedExportWindow.isDestroyed()) {
+    enhancedExportWindow.focus()
+    enhancedExportWindow.webContents.send('export-data', data)
+    return
+  }
+
+  // Create new window with more portrait-like dimensions
+  enhancedExportWindow = new BrowserWindow({
+    width: 1000,
+    height: 1200,
+    minWidth: 800,
+    minHeight: 900,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+      enableRemoteModule: false // Disable remote module to prevent errors
+    },
+    title: 'Enhanced Export',
+    show: false,
+    // Remove alwaysOnTop, parent, and modal settings to prevent DevTools sourcemap issues
+    // Use alternative single-instance management instead
+  })
+
+  enhancedExportWindow.loadURL(`file://${__dirname}/../enhanced-export-window.html`)
+  
+  enhancedExportWindow.once('ready-to-show', () => {
+    enhancedExportWindow.show()
+    enhancedExportWindow.focus() // Ensure window gets focus
+    // Send the board data to the window
+    enhancedExportWindow.webContents.send('export-data', data)
+  })
+
+  // Simple single-instance management: Just ensure window gets focus when opened
+  // No aggressive always-on-top behavior that interferes with DevTools
+
+  // Handle window close event to prevent remote method errors
+  enhancedExportWindow.on('close', (event) => {
+    // Prevent the default close behavior
+    event.preventDefault()
+    
+    // Close the window properly using our IPC method
+    try {
+      if (enhancedExportWindow && !enhancedExportWindow.isDestroyed()) {
+        enhancedExportWindow.destroy()
+      }
+    } catch (error) {
+      console.log('Error in close event handler:', error.message)
+    }
+    
+    // Clear the reference
+    enhancedExportWindow = null
+  })
+
+  enhancedExportWindow.on('closed', () => {
+    // Clear reference when closed
+    enhancedExportWindow = null
+  })
+
+  // Also handle window destruction
+  enhancedExportWindow.on('destroyed', () => {
+    // Clear reference when destroyed
+    enhancedExportWindow = null
+  })
+
+  return enhancedExportWindow
+}
+
 let openNewWindow = () => {
   // reset state
   currentFile = undefined
@@ -399,7 +471,7 @@ let openNewWindow = () => {
 let openWelcomeWindow = () => {
   welcomeWindow = new BrowserWindow({
     width: 900,
-    height: 600,
+    height: 854,
     center: true,
     show: false,
     resizable: false,
@@ -682,14 +754,24 @@ let importWorksheetDialogue = () => {
 }
 
 const processFdxData = fdxObj => {
+  // Check if FDX file is empty or malformed
+  if (!fdxObj || !fdxObj.FinalDraft || !fdxObj.FinalDraft.Content || 
+      !fdxObj.FinalDraft.Content[0] || !fdxObj.FinalDraft.Content[0].Paragraph) {
+    throw new Error('The Final Draft file appears to be empty or corrupted. Please ensure the file contains valid script content.')
+  }
+
   try {
     ensureFdxSceneIds(fdxObj)
   } catch (err) {
-    throw new Error('Could not add scene ids to Final Draft data.\n' + error.message)
-    return
+    throw new Error('Could not add scene ids to Final Draft data.\n' + err.message)
   }
 
   let scriptData = importerFinalDraft.importFdxData(fdxObj)
+
+  // Check if any script data was generated
+  if (!scriptData || scriptData.length === 0) {
+    throw new Error('No script content found in the Final Draft file. Please ensure the file contains scenes and dialogue.')
+  }
 
   let locations = importerFinalDraft.getScriptLocations(scriptData)
   let characters = importerFinalDraft.getScriptCharacters(scriptData)
@@ -1432,6 +1514,51 @@ ipcMain.on('exportPDF', (event, arg) => {
 
 ipcMain.on('exportEnhancedPDF', (event, arg) => {
   mainWindow.webContents.send('exportEnhancedPDF', arg)
+})
+
+ipcMain.on('open-enhanced-export-window', (event, data) => {
+  openEnhancedExportWindow(data)
+})
+
+ipcMain.on('enhanced-export-config', (event, config) => {
+  // Forward the export configuration to the main window
+  mainWindow.webContents.send('enhanced-export-config', config)
+})
+
+ipcMain.on('export-gif-groups', (event, config) => {
+  // Forward the GIF export configuration to the main window
+  mainWindow.webContents.send('export-gif-groups', config)
+})
+
+ipcMain.on('export-pdf-advanced', (event, config) => {
+  // Forward the advanced PDF export configuration to the main window
+  mainWindow.webContents.send('export-pdf-advanced', config)
+})
+
+ipcMain.on('close-enhanced-export-window', (event) => {
+  // Close the enhanced export window properly
+  try {
+    if (enhancedExportWindow) {
+      // Check if window is still valid before calling any methods
+      try {
+        if (typeof enhancedExportWindow.isDestroyed === 'function' && !enhancedExportWindow.isDestroyed()) {
+          enhancedExportWindow.close()
+        }
+      } catch (destroyedError) {
+        // Window is already destroyed, just clear the reference
+        console.log('Window already destroyed, clearing reference')
+      }
+      // Always clear the reference
+      enhancedExportWindow = null
+    }
+  } catch (error) {
+    console.log('Error closing enhanced export window:', error.message)
+    // Force clear the reference
+    enhancedExportWindow = null
+  }
+
+  // Send confirmation back to renderer (for sendSync)
+  event.returnValue = 'closed'
 })
 
 ipcMain.on('exportWeb', (event, arg) => {

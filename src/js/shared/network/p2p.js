@@ -1,6 +1,6 @@
-import Peer from 'peerjs'
-import Packer from 'peerjs-js-binarypack'
-import { STBR_HOST } from './config'
+const Peer = require('peerjs').default
+const Packer = require('peerjs-js-binarypack').default
+const { STBR_HOST } = require('./config')
 
 const EventEmitter = require('events')
 
@@ -127,4 +127,4 @@ const P2P = (host = STBR_HOST) => {
     }
 }
 
-export default P2P
+module.exports = P2P

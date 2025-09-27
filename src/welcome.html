@@ -4,54 +4,134 @@
     <meta charset="UTF-8">
     <link rel="stylesheet" href="./css/fonts.css">
     <link rel="stylesheet" href="./css/welcome.css">
-    <title>Welcome</title>
+    <title>Welcome to Storyboarder</title>
   </head>
-  <body style="">
+  <body>
     <div id="drag-handle"></div>
-    <div id="ad">
-    <iframe
-      id="Example2"
-      frameborder="0"
-      scrolling="no"
-      marginheight="0"
-      marginwidth="0"
-      sandbox="allow-scripts"
-    >
-    </iframe>
-    <div id="close-button">&#10005;</div>
+    
+    <!-- Close button -->
+    <div id="close-button">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
     </div>
+
+    <!-- Main content -->
     <div id="content">
-      <div class="title">
-        <div class="logo">
-          <img src='./img/logoicon.png' draggable="false">
+      <!-- Hero section -->
+      <div class="hero-section">
+        <div class="hero-content">
+          <div class="logo-container">
+            <img src='./img/logoicon.png' draggable="false" class="logo">
+            <div class="brand-info">
+              <div class="company">WONDER UNIT</div>
+              <h1 class="app-title">Storyboarder</h1>
+              <div class="version">v<span data-js='version-number'></span></div>
+            </div>
+          </div>
+          
+          <div class="tagline">
+            <h2>Bring Your Stories to Life</h2>
+            <p>Professional storyboarding made simple. Create, visualize, and share your stories with the industry's most intuitive tool.</p>
+          </div>
         </div>
-        <div class="text">
-          <div>WONDER UNIT //<span data-js='version-number'></span></div>
-          <h1>Storyboarder</h1>
-          <div></div>
+        
+        <!-- Animated background elements -->
+        <div class="bg-elements">
+          <div class="bg-circle circle-1"></div>
+          <div class="bg-circle circle-2"></div>
+          <div class="bg-circle circle-3"></div>
         </div>
       </div>
-      <div class="recent-container">
-        <span class="recent"></span>
-        <div id="recent">
-          <div id="welcome">
-            <p id="welcome-line-1">Storyboarder simply allows you to visually board your stories as fast as you possibly can.</p>
 
-            <p id="welcome-line-2">Either work from a written story, or create a completely new board file. Create a board, draw in it, create a board, draw in it, and start to see your story come to life. You can also print out worksheets, draw on them, and easily import them.</p>
+      <!-- Main content area -->
+      <div class="main-content">
+        <!-- Recent files section -->
+        <div class="recent-section">
+          <div class="section-header">
+            <h3 class="section-title">Recent Projects</h3>
+            <div class="section-divider"></div>
+          </div>
+          
+          <div class="recent-container">
+            <div id="recent">
+              <div id="welcome">
+                <div class="welcome-content">
+                  <div class="feature-grid">
+                    <div class="feature-card">
+                      <div class="feature-icon">🎬</div>
+                      <h4>Visual Storytelling</h4>
+                      <p>Transform your ideas into compelling visual narratives</p>
+                    </div>
+                    <div class="feature-card">
+                      <div class="feature-icon">⚡</div>
+                      <h4>Lightning Fast</h4>
+                      <p>Create storyboards as fast as you can think</p>
+                    </div>
+                    <div class="feature-card">
+                      <div class="feature-icon">🎨</div>
+                      <h4>Professional Tools</h4>
+                      <p>Industry-standard features for every creator</p>
+                    </div>
+                  </div>
+                  
+                  <div class="inspiration-text">
+                    <p id="welcome-line-1">Every great story begins with a single frame.</p>
+                    <p id="welcome-line-2">Whether you're crafting the next blockbuster or bringing your personal vision to life, Storyboarder gives you the tools to make it happen.</p>
+                    <p id="welcome-line-3">Ready to create something amazing?</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
-            <p id="welcome-line-3">Let's get started...</p>
+        <!-- Action buttons -->
+        <div class="action-section">
+          <div class="button-grid">
+            <div class="primary-actions">
+              <button class="btn btn-primary" id="new-storyboard">
+                <div class="btn-icon">✨</div>
+                <div class="btn-content">
+                  <div class="btn-title">Create New Storyboard</div>
+                  <div class="btn-subtitle">Start from scratch</div>
+                </div>
+              </button>
+              
+              <button class="btn btn-secondary" id="open-storyboard">
+                <div class="btn-icon">📁</div>
+                <div class="btn-content">
+                  <div class="btn-title">Open Project</div>
+                  <div class="btn-subtitle">Continue your work</div>
+                </div>
+              </button>
+            </div>
+            
+            <div class="secondary-actions">
+              <button class="btn btn-ghost" id="getting-started">
+                <div class="btn-icon">📚</div>
+                <div class="btn-content">
+                  <div class="btn-title">Getting Started</div>
+                  <div class="btn-subtitle">Learn the basics</div>
+                </div>
+              </button>
+            </div>
           </div>
         </div>
       </div>
-      <div class="button-grid">
-        <div>
-          <div class="button blue" id="getting-started">Getting started…</div>
-        </div>
-        <div>
-          <div class="button blue" id="open-storyboard">Open…</div>
-          <div class="button blue" id="new-storyboard">Create New Storyboard…</div>
-        </div>
-      </div>
+    </div>
+
+    <!-- Ad section (hidden by default, can be toggled) -->
+    <div id="ad" style="display: none;">
+      <iframe
+        id="Example2"
+        frameborder="0"
+        scrolling="no"
+        marginheight="0"
+        marginwidth="0"
+        sandbox="allow-scripts"
+      >
+      </iframe>
     </div>
   </body>
   <script>

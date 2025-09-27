@@ -49,6 +49,9 @@ class AudioFileControlView {
       }
     })
     ro.observe(recordVisualization)
+    
+    // Store the ResizeObserver for cleanup
+    this.resizeObserver = ro
 
     this.countdown = undefined
 
@@ -58,6 +61,13 @@ class AudioFileControlView {
     // if we need to record input, we'll go through the `initializing` state
     // via prepareToRecord
     this.setState({ mode: 'stopped' })
+  }
+
+  dispose() {
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect()
+      this.resizeObserver = null
+    }
   }
 
   prepareToRecord () {

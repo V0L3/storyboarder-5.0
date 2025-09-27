@@ -16,6 +16,9 @@ const durationOfWords = (text, durationPerWord) =>
   : 0
 
 const elementText = element => {
+  if (!element.Text || !element.Text[0]) {
+    return undefined
+  }
   if (typeof element.Text[0] === 'string') {
     return element.Text[0]
   } else if (element.Text[0]._) {
@@ -43,6 +46,13 @@ const readFdxFile = async filepath => {
 // mutates fdxObj
 const insertSceneIds = (fdxObj, generateNumber = () => util.uidGen(5)) => {
   let inserted = []
+  
+  // Check if the FDX structure is valid
+  if (!fdxObj || !fdxObj.FinalDraft || !fdxObj.FinalDraft.Content || 
+      !fdxObj.FinalDraft.Content[0] || !fdxObj.FinalDraft.Content[0].Paragraph) {
+    return inserted
+  }
+  
   fdxObj.FinalDraft.Content[0].Paragraph.forEach((element, i) => {
     switch (element.$.Type) {
       case 'Scene Heading':
@@ -90,6 +100,13 @@ const importFdxData = fdxObj => {
     }
   }
 
+  // Check if the FDX structure is valid
+  if (!fdxObj || !fdxObj.FinalDraft || !fdxObj.FinalDraft.Content || 
+      !fdxObj.FinalDraft.Content[0] || !fdxObj.FinalDraft.Content[0].Paragraph) {
+    // Return empty script for empty or malformed FDX files
+    return script
+  }
+
   fdxObj.FinalDraft.Content[0].Paragraph.forEach((element, i) => {
     switch (element.$.Type) {
       case 'Scene Heading':
@@ -111,16 +128,17 @@ const importFdxData = fdxObj => {
         sceneAtom['script'].push(atom)
         sceneAtom['scene_number'] = currentScene
         //sceneAtom['scene_id'] = token.scene_number
-        if (element.Text[0]._) {
-          sceneAtom['slugline'] = element.Text[0]._
-        } else {
-          if (typeof element.Text[0] === 'string') {
-            sceneAtom['slugline'] = element.Text[0]
+        if (element.Text && element.Text[0]) {
+          if (element.Text[0]._) {
+            sceneAtom['slugline'] = element.Text[0]._
+          } else {
+            if (typeof element.Text[0] === 'string') {
+              sceneAtom['slugline'] = element.Text[0]
+            }
           }
         }
         sceneAtom['slugline'] = sceneAtom['slugline'] && sceneAtom['slugline'].toUpperCase()
         sceneAtom['time'] = currentTime
-        //console.log(element.Text[0])
         break
 
       case 'Action':
@@ -128,11 +146,9 @@ const importFdxData = fdxObj => {
         if ( element.DualDialogue) {
           // TODO HANDLE DUAL DIALOGUE
           // loop through, add the nodes
-          //console.log(element.DualDialogue[0].Paragraph)
 
         } else {
-          if (typeof element.Text[0] == 'string') {
-            //console.log(typeof element.Text[0])
+          if (element.Text && element.Text[0] && typeof element.Text[0] == 'string') {
           token = {}
           token['type'] = 'action'
           token['time'] = currentTime
@@ -151,7 +167,6 @@ const importFdxData = fdxObj => {
         break
 
       case 'Character':
-        //console.log(element.Text[0])
         if (elementText(element)) {
           currentCharacter = elementText(element).toUpperCase()
           sceneWordCount += wordCount(currentCharacter)
@@ -159,25 +174,25 @@ const importFdxData = fdxObj => {
         break
 
       case 'Parenthetical':
-        //console.log(element.Text[0])
-        token = {}
-        token['type'] = 'parenthetical'
-        token['text'] = element.Text[0]
-        token['time'] = currentTime
-        token['duration'] = durationOfWords(token.text, 300)+1000
-        token['scene'] = currentScene
-        token['character'] = currentCharacter
-        currentTime += token['duration']
-        sceneAtom['script'].push(token)
-        sceneWordCount += wordCount(token.text)
+        if (element.Text && element.Text[0]) {
+          token = {}
+          token['type'] = 'parenthetical'
+          token['text'] = element.Text[0]
+          token['time'] = currentTime
+          token['duration'] = durationOfWords(token.text, 300)+1000
+          token['scene'] = currentScene
+          token['character'] = currentCharacter
+          currentTime += token['duration']
+          sceneAtom['script'].push(token)
+          sceneWordCount += wordCount(token.text)
+        }
         break
 
       case 'Dialogue':
         if (typeof element.Text == 'array') {
-          //console.log(element.Text)
 
         } else {
-          if (typeof element.Text[0] == 'string') {
+          if (element.Text && element.Text[0] && typeof element.Text[0] == 'string') {
             token = {}
             token['type'] = 'dialogue'
             token['text'] = element.Text[0]
@@ -192,7 +207,6 @@ const importFdxData = fdxObj => {
         }
         break
     }
-    // console.log(element.$.Type)
   })
 
   flush()

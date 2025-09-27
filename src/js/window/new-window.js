@@ -1,4 +1,5 @@
 const { ipcRenderer, shell, remote } = require('electron')
+const menu = require('../menu')
 
 //#region Localization
 const i18n = require('../services/i18next.config')
@@ -29,8 +30,7 @@ const updateHTMLText = () => {
   translateHtml("#script-based-description", "new-window.script-based-description")
   translateHtml("#blank-title", "new-window.blank-title")
   translateHtml("#blank-description", "new-window.blank-description")
-  translateHtml("#new-script", "new-window.new-script")
-  translateHtml("#new-blank", "new-window.new-blank")
+  // Removed #new-script and #new-blank translations as these are now column containers
   translateHtml("#aspect-title", "new-window.aspect-title")
   translateHtml("#aspect-ultrawide", "new-window.aspect-ultrawide")
   translateHtml("#aspect-doublewide", "new-window.aspect-doublewide")
@@ -71,40 +71,67 @@ ipcRenderer.on("languageRemoved", (event, lng) => {
   i18n.changeLanguage(lng)
 })
 //#endregion
-// close
-document.querySelector('#close-button').addEventListener('click', e => {
-  ipcRenderer.send('playsfx', 'negative')
-  let window = remote.getCurrentWindow()
-  window.hide()
-})
+// Set up event listeners with error handling
+const setupEventListeners = () => {
+  // close
+  const closeButton = document.querySelector('#close-button')
+  if (closeButton) {
+    closeButton.addEventListener('click', e => {
+      ipcRenderer.send('playsfx', 'negative')
+      let window = remote.getCurrentWindow()
+      window.hide()
+    })
+  }
 
-// new script-based
-document.querySelector('#new-script').addEventListener('click', () => {
-  ipcRenderer.send('openDialogue')
-})
+  // new script-based
+  const newScriptButton = document.querySelector('#new-script')
+  if (newScriptButton) {
+    newScriptButton.addEventListener('click', () => {
+      ipcRenderer.send('openDialogue')
+    })
 
-document.querySelector('#new-script').addEventListener("mouseover", () =>{
-  ipcRenderer.send('playsfx', 'rollover')
-})
+    newScriptButton.addEventListener("mouseover", () =>{
+      ipcRenderer.send('playsfx', 'rollover')
+    })
 
-document.querySelector('#new-script').addEventListener("pointerdown", () => {
-  ipcRenderer.send('playsfx', 'down')
-})
+    newScriptButton.addEventListener("pointerdown", () => {
+      ipcRenderer.send('playsfx', 'down')
+    })
+  }
 
-// new blank
-document.querySelector('#new-blank').addEventListener('click', () => {
-  // switch tabs
-  document.querySelectorAll('.tab')[0].style.display = 'none'
-  document.querySelectorAll('.tab')[1].style.display = 'block'
-})
+  // new blank
+  const newBlankButton = document.querySelector('#new-blank')
+  if (newBlankButton) {
+    newBlankButton.addEventListener('click', () => {
+      // switch tabs
+      document.querySelectorAll('.tab')[0].style.display = 'none'
+      document.querySelectorAll('.tab')[1].style.display = 'block'
+    })
 
-document.querySelector('#new-blank').addEventListener("mouseover", () => {
-  ipcRenderer.send('playsfx', 'rollover')
-})
+    newBlankButton.addEventListener("mouseover", () => {
+      ipcRenderer.send('playsfx', 'rollover')
+    })
 
-document.querySelector('#new-blank').addEventListener("pointerdown", () => {
-  ipcRenderer.send('playsfx', 'down')
-})
+    newBlankButton.addEventListener("pointerdown", () => {
+      ipcRenderer.send('playsfx', 'down')
+    })
+  }
+
+  // aspect ratio examples
+  document.querySelectorAll('.example').forEach(el => {
+    el.addEventListener('click', event => {
+      ipcRenderer.send('createNew', el.dataset.aspectRatio)
+      event.preventDefault()
+    })
+  })
+}
+
+// Set up event listeners when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', setupEventListeners)
+} else {
+  setupEventListeners()
+}
 
 window.ondragover = () => { return false }
 window.ondragleave = () => { return false }

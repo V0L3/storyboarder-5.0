@@ -904,9 +904,22 @@ class DrawingStrategy {
   }
 
   _onWheel (e) {
-    // zoom
-    let delta = e.deltaY / 100
-    let scale = Math.min(Math.max(this.context.sketchPane.zoom + delta, 0.25), 5)
+    // zoom - fixed direction and smoother scaling
+    e.preventDefault()
+    
+    // Fixed zoom direction: scroll up = zoom in, scroll down = zoom out
+    const zoomDirection = e.deltaY < 0 ? 1 : -1
+    
+    // Much smaller, more controlled zoom steps
+    const zoomStep = 0.1
+    const currentZoom = this.context.sketchPane.zoom
+    const newZoom = currentZoom + (zoomDirection * zoomStep)
+    
+    // Clamp zoom between reasonable bounds
+    const minZoom = 0.25
+    const maxZoom = 5.0
+    const scale = Math.min(Math.max(newZoom, minZoom), maxZoom)
+    
     this.context.zoomAt(e, scale)
   }
 
@@ -1381,6 +1394,21 @@ class FPSMeter {
   hadLowFps (threshold = 20) {
     return this.fpsList.length === this.numToAvg && this.avg() <= threshold
   }
+}
+
+// Add dispose method to clean up ResizeObserver
+StoryboarderSketchPane.prototype.dispose = function() {
+  if (this.ro) {
+    this.ro.disconnect()
+    this.ro = null
+  }
+  
+  if (this.containerEl) {
+    this.containerEl.remove()
+  }
+  
+  window.removeEventListener('blur', this.onWindowBlurForApp)
+  window.removeEventListener('focus', this.onWindowFocusForApp)
 }
 
 class IdleTimer {

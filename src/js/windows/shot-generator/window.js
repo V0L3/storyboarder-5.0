@@ -16,6 +16,61 @@ const { ActionCreators } = require('redux-undo')
 const log = require('../../shared/storyboarder-electron-log')
 log.catchErrors()
 
+// WebGL detection and error handling
+const Detector = require('../../vendor/Detector')
+
+// Check WebGL support before initializing
+if (!Detector.webgl) {
+  console.error('WebGL is not supported on this system')
+  document.addEventListener('DOMContentLoaded', () => {
+    const mainElement = document.getElementById('main')
+    if (mainElement) {
+      mainElement.innerHTML = `
+        <div style="
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          height: 100vh;
+          background: #333;
+          color: #fff;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          text-align: center;
+          padding: 20px;
+        ">
+          <div style="font-size: 48px; margin-bottom: 20px;">⚠️</div>
+          <h1 style="font-size: 24px; margin-bottom: 16px; color: #ff6b6b;">WebGL Not Supported</h1>
+          <p style="font-size: 16px; line-height: 1.5; max-width: 500px; margin-bottom: 20px;">
+            Shot Generator requires WebGL support to render 3D graphics. Your graphics card or drivers may not support WebGL, or it may be disabled in your browser settings.
+          </p>
+          <div style="background: #444; padding: 16px; border-radius: 8px; max-width: 600px; text-align: left;">
+            <h3 style="margin-top: 0; color: #4ecdc4;">Troubleshooting Steps:</h3>
+            <ul style="margin: 0; padding-left: 20px;">
+              <li>Update your graphics drivers to the latest version</li>
+              <li>Make sure hardware acceleration is enabled in your system settings</li>
+              <li>Try restarting Storyboarder</li>
+              <li>Check if other 3D applications work on your system</li>
+            </ul>
+          </div>
+          <button onclick="window.close()" style="
+            margin-top: 20px;
+            padding: 12px 24px;
+            background: #4ecdc4;
+            color: #333;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+          ">Close Window</button>
+        </div>
+      `
+    }
+  })
+  // Don't continue with the rest of the initialization
+  throw new Error('WebGL not supported')
+}
+
 const observable = require("../../utils/observable").default
 const {loadAsset, cleanUpCache} = require("../../shot-generator/hooks/use-assets-manager")
 const ModelLoader = require("./../../services/model-loader")

@@ -19,12 +19,74 @@ class GifGroupManager {
     this.updateTimelineDisplay()
   }
 
+  showInputDialog(message, title, defaultValue = '') {
+    return new Promise((resolve) => {
+      // Remove existing input dialog if present
+      const existing = document.querySelector('#input-dialog')
+      if (existing) existing.remove()
+
+      const dialog = document.createElement('div')
+      dialog.id = 'input-dialog'
+      dialog.className = 'input-dialog-overlay'
+      dialog.innerHTML = `
+        <div class="input-dialog-container">
+          <div class="input-dialog-header">
+            <h3>${title}</h3>
+            <button class="input-dialog-close">&times;</button>
+          </div>
+          <div class="input-dialog-content">
+            <p>${message}</p>
+            <input type="text" id="input-dialog-field" placeholder="Enter value..." value="${defaultValue}" autofocus>
+          </div>
+          <div class="input-dialog-actions">
+            <button id="input-dialog-cancel" class="btn btn-secondary">Cancel</button>
+            <button id="input-dialog-ok" class="btn btn-primary">OK</button>
+          </div>
+        </div>
+      `
+
+      document.body.appendChild(dialog)
+
+      const input = dialog.querySelector('#input-dialog-field')
+      const okBtn = dialog.querySelector('#input-dialog-ok')
+      const cancelBtn = dialog.querySelector('#input-dialog-cancel')
+      const closeBtn = dialog.querySelector('.input-dialog-close')
+
+      const cleanup = () => {
+        document.body.removeChild(dialog)
+      }
+
+      const handleOk = () => {
+        const value = input.value.trim()
+        cleanup()
+        resolve(value)
+      }
+
+      const handleCancel = () => {
+        cleanup()
+        resolve(null)
+      }
+
+      okBtn.addEventListener('click', handleOk)
+      cancelBtn.addEventListener('click', handleCancel)
+      closeBtn.addEventListener('click', handleCancel)
+
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') handleOk()
+        if (e.key === 'Escape') handleCancel()
+      })
+
+      // Focus the input field
+      setTimeout(() => input.focus(), 100)
+    })
+  }
+
   setupKeyboardShortcuts() {
     document.addEventListener('keydown', (e) => {
       // Ctrl+G or Cmd+G to create GIF group
       if ((e.ctrlKey || e.metaKey) && e.key === 'g') {
         e.preventDefault()
-        this.createGroupFromSelection()
+        this.createGroupFromCurrentSelection()
       }
       
       // Escape to cancel grouping mode
@@ -229,14 +291,43 @@ class GifGroupManager {
     }
   }
 
-  createGroupFromSelection() {
+  async createGroupFromCurrentSelection() {
+    // Get the current board from the main application
+    const currentBoard = window.currentBoard || 0
+    const boardCount = this.boardData.boards.length
+    
+    // For now, create a group with the current board and the next few boards
+    // This is a simple implementation - in a real scenario, you'd want to integrate
+    // with the main application's multi-selection system
+    const startBoard = currentBoard
+    const endBoard = Math.min(currentBoard + 2, boardCount - 1)
+    
+    if (endBoard - startBoard < 1) {
+      alert('Please select at least 2 boards to create a group. Use the board navigation to select a range.')
+      return
+    }
+
+    const boardIndices = Array.from({length: endBoard - startBoard + 1}, (_, i) => startBoard + i)
+    const name = await this.showInputDialog('Enter group name:', 'Create GIF Group', `Group ${this.layoutManager.getGifGroups().length + 1}`)
+    
+    if (name) {
+      const groupId = this.layoutManager.createGifGroup(name, boardIndices)
+      this.updateTimelineDisplay()
+      this.updateGroupsList()
+      
+      // Show success message
+      this.showNotification(`Created GIF group "${name}" with boards ${startBoard + 1}-${endBoard + 1}`)
+    }
+  }
+
+  async createGroupFromSelection() {
     if (this.selectedBoards.size < 2) {
       alert('Please select at least 2 boards to create a group.')
       return
     }
 
     const boardIndices = Array.from(this.selectedBoards).sort((a, b) => a - b)
-    const name = prompt('Enter group name:', `Group ${this.layoutManager.getGifGroups().length + 1}`)
+    const name = await this.showInputDialog('Enter group name:', 'Create GIF Group', `Group ${this.layoutManager.getGifGroups().length + 1}`)
     
     if (name) {
       const groupId = this.layoutManager.createGifGroup(name, boardIndices)
@@ -457,7 +548,7 @@ class GifGroupManager {
             <div class="preview-boards">
               ${group.boardIndices.map(index => `
                 <div class="preview-board">
-                  <img src="path/to/board-${index}-thumbnail.jpg" alt="Board ${index + 1}">
+                  <img src="" alt="Board ${index + 1}" data-board-index="${index}">
                   <div class="board-number">Board ${index + 1}</div>
                 </div>
               `).join('')}
@@ -502,12 +593,62 @@ class GifGroupManager {
       document.body.removeChild(dialog)
     })
 
+    // Load actual board images
+    this.loadBoardImagesForPreview(dialog, group)
+
     // Update duration display
     const durationSlider = dialog.querySelector('#frame-duration')
     const durationValue = dialog.querySelector('#duration-value')
     
     durationSlider.addEventListener('input', (e) => {
       durationValue.textContent = `${e.target.value}ms`
+    })
+  }
+
+  loadBoardImagesForPreview(dialog, group) {
+    const boardImages = dialog.querySelectorAll('.preview-board img[data-board-index]')
+    
+    boardImages.forEach(img => {
+      const boardIndex = parseInt(img.dataset.boardIndex)
+      const board = this.boardData.boards[boardIndex]
+      
+      if (board) {
+        // Try to get the poster frame image path
+        let imagePath = null
+        try {
+          const boardModel = require('../models/board')
+          const posterFrameFilename = boardModel.boardFilenameForPosterFrame(board)
+          const path = require('path')
+          const projectDir = path.dirname(this.options.projectPath || window.boardFilename)
+          const imagesDir = path.join(projectDir, 'images')
+          imagePath = path.join(imagesDir, posterFrameFilename)
+        } catch (error) {
+          console.warn('Could not load board model:', error)
+          // Fallback to board URL
+          if (board.url) {
+            imagePath = board.url
+          }
+        }
+        
+        if (imagePath) {
+          // Convert to file:// URL for display
+          const fileUrl = `file://${imagePath.replace(/\\/g, '/')}`
+          img.src = fileUrl
+          img.onerror = () => {
+            img.style.display = 'none'
+            const placeholder = document.createElement('div')
+            placeholder.textContent = 'No Image'
+            placeholder.style.cssText = 'display: flex; align-items: center; justify-content: center; height: 100%; background: #f0f0f0; color: #666;'
+            img.parentNode.appendChild(placeholder)
+          }
+        } else {
+          img.style.display = 'none'
+          const placeholder = document.createElement('div')
+          placeholder.textContent = 'No Image'
+          placeholder.style.cssText = 'display: flex; align-items: center; justify-content: center; height: 100%; background: #f0f0f0; color: #666;'
+          img.parentNode.appendChild(placeholder)
+        }
+      }
     })
   }
 

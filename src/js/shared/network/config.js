@@ -1,1 +1,2 @@
-export const STBR_HOST = 'stbr.link'
+const STBR_HOST = 'stbr.link'
+module.exports = { STBR_HOST }

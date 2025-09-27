@@ -104,17 +104,82 @@ AppMenu.File = (i18n) => ({
     {
       type: 'separator'
     },
+    // Enhanced Export (Primary)
     {
-      label: i18n.t('menu.file.export-animated-gif'),
-      accelerator: keystrokeFor('menu:file:export-animated-gif'),
+      label: i18n.t('menu.file.enhanced-export'),
+      accelerator: 'CmdOrCtrl+Shift+E',
       click (item, focusedWindow, event) {
-        ipcRenderer.send('exportAnimatedGif')
+        ipcRenderer.send('exportEnhancedPDF')
       }
     },
     {
-      label: i18n.t('menu.file.export-scene-final-cut-proX-and-premiere'),
+      label: i18n.t('menu.file.print-pdf'),
+      accelerator: keystrokeFor('menu:file:print'),
       click (item, focusedWindow, event) {
-        ipcRenderer.send('exportFcp')
+        ipcRenderer.send('exportPDF')
+      }
+    },
+    {
+      type: 'separator'
+    },
+    // Media Export
+    {
+      label: 'Export GIF Groups',
+      accelerator: 'CmdOrCtrl+Shift+G',
+      click (item, focusedWindow, event) {
+        ipcRenderer.send('exportEnhancedPDF')
+      }
+    },
+    {
+      label: 'GIF Grouping',
+      submenu: [
+        {
+          label: 'Group Selected Boards (Ctrl+G)',
+          accelerator: 'CmdOrCtrl+G',
+          click (item, focusedWindow, event) {
+            document.dispatchEvent(new KeyboardEvent('keydown', {
+              key: 'G',
+              ctrlKey: true
+            }))
+          }
+        },
+        {
+          label: 'Ungroup Selected Boards (Ctrl+Shift+G)',
+          accelerator: 'CmdOrCtrl+Shift+G',
+          click (item, focusedWindow, event) {
+            document.dispatchEvent(new KeyboardEvent('keydown', {
+              key: 'G',
+              ctrlKey: true,
+              shiftKey: true
+            }))
+          }
+        },
+        {
+          label: 'Open Grouping Menu (Shift+G)',
+          accelerator: 'Shift+G',
+          click (item, focusedWindow, event) {
+            document.dispatchEvent(new KeyboardEvent('keydown', {
+              key: 'G',
+              shiftKey: true
+            }))
+          }
+        },
+        {
+          type: 'separator'
+        },
+        {
+          label: 'Open Export Site',
+          accelerator: 'CmdOrCtrl+Shift+E',
+          click (item, focusedWindow, event) {
+            ipcRenderer.send('exportEnhancedPDF')
+          }
+        }
+      ]
+    },
+    {
+      label: i18n.t('menu.file.export-video'),
+      click (item, focusedWindow, event) {
+        ipcRenderer.send('exportVideo')
       }
     },
     {
@@ -124,9 +189,13 @@ AppMenu.File = (i18n) => ({
       }
     },
     {
-      label: i18n.t('menu.file.export-video'),
+      type: 'separator'
+    },
+    // Professional Export
+    {
+      label: i18n.t('menu.file.export-scene-final-cut-proX-and-premiere'),
       click (item, focusedWindow, event) {
-        ipcRenderer.send('exportVideo')
+        ipcRenderer.send('exportFcp')
       }
     },
     {
@@ -144,27 +213,11 @@ AppMenu.File = (i18n) => ({
     {
       type: 'separator'
     },
+    // Cleanup
     {
       label: i18n.t('menu.file.clean-up-scene'),
       click (item, focusedWindow, event) {
         ipcRenderer.send('exportCleanup')
-      }
-    },
-    {
-      type: 'separator'
-    },
-    {
-      label: i18n.t('menu.file.print-pdf'),
-      accelerator: keystrokeFor('menu:file:print'),
-      click (item, focusedWindow, event) {
-        ipcRenderer.send('exportEnhancedPDF')
-      }
-    },
-    {
-      label: 'Enhanced Export...',
-      accelerator: 'CmdOrCtrl+Shift+E',
-      click (item, focusedWindow, event) {
-        ipcRenderer.send('exportEnhancedPDF')
       }
     },
     {
