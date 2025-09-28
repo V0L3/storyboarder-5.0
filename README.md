@@ -3,6 +3,7 @@
 * Improved PDF-Export
 * HTML export added
 * Added GIF-groups (Shift+G, Ctrl+G, Ctrl+Shift+G)
+* Improved shot-naming convention
 * Quality-of-life improvements
 * new start-screen
 * fixed .fdx import
