@@ -7,6 +7,7 @@
 * Quality-of-life improvements
 * new start-screen
 * fixed .fdx import
+* shortcut for 'new shot?' (C)
 
 ## *Things I wasn't able to implement, or fix (yet):*
 
