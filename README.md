@@ -6,7 +6,7 @@
 * Quality-of-life improvements
 * new start-screen
 * fixed .fdx import
-* better UI-refresh
+* fixed UI-refresh
 * Ctrl+Z (undo) points for grouping
 
 ## *Things I wasn't able to implement, or fix (yet):*
