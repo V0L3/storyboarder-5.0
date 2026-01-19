@@ -20,8 +20,9 @@
 * font type
 * bug: broke shot generator
 
-[Download Portable ZIP]: (https://github.com/V0L3/storyboarder-5.0/releases/tag/Download)
 
+
+Download Portable ZIP: (https://github.com/V0L3/storyboarder-5.0/releases/tag/Download)
 
 
 
