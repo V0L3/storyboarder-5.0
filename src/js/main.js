@@ -123,6 +123,13 @@ const syncLanguages = (dir, isLanguageFile, array) => {
 }
 
 app.on('ready', async () => {
+  // Ensure proper Windows taskbar grouping and icon identity
+  if (process.platform === 'win32') {
+    try {
+      const appId = (pkg && pkg.build && pkg.build.appId) ? pkg.build.appId : 'com.wonderunit.storyboarder'
+      app.setAppUserModelId(appId)
+    } catch (e) {}
+  }
   analytics.init(prefs.enableAnalytics)
 
   const exporterFfmpeg = require('./exporters/ffmpeg')
@@ -1139,6 +1146,10 @@ let loadStoryboarderWindow = (filename, scriptData, locations, characters, board
     show: false,
     resizable: true,
     titleBarStyle: 'hiddenInset',
+    // Provide explicit icon for Windows/Linux (dev/unpacked helpful)
+    icon: (process.platform === 'win32'
+      ? path.join(__dirname, '../../build/icon.ico')
+      : path.join(__dirname, '../../build/icon.icns')),
     webPreferences: {
       webgl: true,
       experimentalFeatures: true,

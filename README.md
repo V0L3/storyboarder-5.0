@@ -1,3 +1,28 @@
+## My changes:
+
+* Improved PDF-Export
+* HTML export added
+* Added GIF-groups (Shift+G, Ctrl+G, Ctrl+Shift+G)
+* Quality-of-life improvements
+* new start-screen
+* fixed .fdx import
+
+## *Things I wasn't able to implement, or fix (yet):*
+
+* better UI-refresh
+* Ctrl+Z (undo) points for grouping
+* edges/rounded GUI
+* GIFs in PDF (currently only works in HTML)
+* option to swap left and right click
+* dynamic duration in HTML
+* scaling: 50%=100%   ->   100%=200%
+* option to put dialog in 'quotations'
+* font type
+* bug: broke shot generator
+
+
+
+
 # Storyboarder
 
 Storyboarder makes it easy to visualize a story as fast you can draw stick figures. Quickly draw to test if a story idea works. Create and show animatics to others. Express your story idea without making a movie.
@@ -7,6 +32,8 @@ Storyboarder makes it easy to visualize a story as fast you can draw stick figur
 Whether you are a story artist, writer, director, in advertising, or just a person with an idea, you can use this to quickly make storyboards.
 
 ## Download
+
+Original repo: https://github.com/wonderunit/storyboarder
 
 ### [Click here to download the latest release](https://wonderunit.com/storyboarder/)
 

@@ -302,21 +302,52 @@ class EnhancedHTMLExporter {
             left: 50%;
             transform: translateX(-50%);
             display: flex;
-            gap: 10px;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .gif-modal-controls, .zoom-controls-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 8px 12px;
+            border-radius: 8px;
         }
         
         .zoom-btn {
-            background: rgba(255,255,255,0.8);
+            background: rgba(255,255,255,0.9);
             border: none;
             padding: 10px 15px;
             border-radius: 5px;
             cursor: pointer;
             font-size: 14px;
             font-weight: bold;
+            transition: all 0.15s ease;
         }
         
         .zoom-btn:hover {
             background: white;
+            transform: scale(1.05);
+        }
+        
+        .zoom-btn:active {
+            transform: scale(0.98);
+        }
+        
+        .gif-ctrl-btn {
+            min-width: 45px;
+            text-align: center;
+        }
+        
+        .gif-frame-counter {
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: monospace;
+            min-width: 60px;
+            text-align: center;
+            padding: 0 8px;
         }
         
         .text-content {
@@ -431,6 +462,101 @@ class EnhancedHTMLExporter {
             margin-left: 3px;
         }
         
+        /* GIF Playback Controls */
+        .gif-container {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+        
+        .gif-container canvas {
+            width: 100%;
+            height: auto;
+            border: 1px solid #ccc;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            display: block;
+        }
+        
+        .gif-container canvas:hover {
+            transform: scale(1.01);
+        }
+        
+        .gif-container.has-controls canvas {
+            border: 2px solid #0066cc;
+        }
+        
+        .gif-controls {
+            position: absolute;
+            bottom: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(0, 0, 0, 0.75);
+            padding: 6px 10px;
+            border-radius: 20px;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            z-index: 10;
+        }
+        
+        .gif-container:hover .gif-controls {
+            opacity: 1;
+        }
+        
+        .gif-controls button {
+            background: transparent;
+            border: none;
+            color: white;
+            cursor: pointer;
+            padding: 4px 8px;
+            font-size: 14px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 28px;
+            transition: background 0.15s ease;
+        }
+        
+        .gif-controls button:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .gif-controls button:active {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .gif-controls .frame-info {
+            color: white;
+            font-size: 11px;
+            font-weight: 500;
+            min-width: 50px;
+            text-align: center;
+            font-family: monospace;
+        }
+        
+        .gif-controls .speed-info {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 10px;
+            margin-left: 4px;
+        }
+        
+        .gif-badge {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: #0066cc;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: bold;
+            z-index: 5;
+        }
+        
         .watermark {
             position: fixed;
             top: 50%;
@@ -525,9 +651,17 @@ class EnhancedHTMLExporter {
             <img id="modalImage" src="" alt="">
         </div>
         <div class="image-modal-controls">
-            <button class="zoom-btn" onclick="zoomIn()">Zoom In</button>
-            <button class="zoom-btn" onclick="zoomOut()">Zoom Out</button>
-            <button class="zoom-btn" onclick="resetZoom()">Reset</button>
+            <div class="gif-modal-controls" id="gifModalControls" style="display: none;">
+                <button class="zoom-btn gif-ctrl-btn" onclick="gifPrevFrame()" title="Previous Frame">&lt;&lt;</button>
+                <button class="zoom-btn gif-ctrl-btn" id="gifPlayPauseBtn" onclick="gifTogglePlay()" title="Play/Pause">Pause</button>
+                <button class="zoom-btn gif-ctrl-btn" onclick="gifNextFrame()" title="Next Frame">&gt;&gt;</button>
+                <span class="gif-frame-counter" id="gifFrameCounter">1 / 1</span>
+            </div>
+            <div class="zoom-controls-group">
+                <button class="zoom-btn" onclick="zoomIn()">Zoom In</button>
+                <button class="zoom-btn" onclick="zoomOut()">Zoom Out</button>
+                <button class="zoom-btn" onclick="resetZoom()">Reset</button>
+            </div>
         </div>
     </div>
     
@@ -598,11 +732,35 @@ class EnhancedHTMLExporter {
             });
         }
         
+    // ========== Modal GIF Controller ==========
+    let modalGifController = null;
+    
+    function gifPrevFrame() {
+        if (modalGifController) {
+            modalGifController.prevFrame();
+        }
+    }
+    
+    function gifNextFrame() {
+        if (modalGifController) {
+            modalGifController.nextFrame();
+        }
+    }
+    
+    function gifTogglePlay() {
+        if (modalGifController) {
+            modalGifController.togglePlay();
+        }
+    }
+    
     function initializeImageModal() {
           const modal = document.getElementById('imageModal');
           const modalImg = document.getElementById('modalImage');
           const modalContent = document.querySelector('.image-modal-content');
           const closeBtn = document.querySelector('.image-modal-close');
+          const gifControls = document.getElementById('gifModalControls');
+          const gifPlayPauseBtn = document.getElementById('gifPlayPauseBtn');
+          const gifFrameCounter = document.getElementById('gifFrameCounter');
           let currentZoom = 1;
           let minZoom = 0.1;
           const maxZoom = 5;
@@ -643,6 +801,30 @@ class EnhancedHTMLExporter {
                     modal.style.display = 'block';
                     modalImg.src = e.target.src;
                     modalImg.alt = e.target.alt;
+                    
+                    // Check if this is a GIF and set up GIF controls
+                    const isGif = e.target.src.toLowerCase().endsWith('.gif');
+                    console.log('[Modal] Image clicked:', e.target.src);
+                    console.log('[Modal] Is GIF:', isGif);
+                    console.log('[Modal] GIF controls element:', gifControls);
+                    
+                    if (isGif && gifControls) {
+                        console.log('[Modal] Showing GIF controls');
+                        gifControls.style.display = 'flex';
+                        // Initialize modal GIF controller
+                        initModalGifController(e.target.src);
+                    } else if (gifControls) {
+                        console.log('[Modal] Hiding GIF controls (not a GIF)');
+                        gifControls.style.display = 'none';
+                        // Clean up any existing modal GIF controller
+                        if (modalGifController) {
+                            modalGifController.destroy();
+                            modalGifController = null;
+                        }
+                    } else {
+                        console.log('[Modal] WARNING: gifControls element not found!');
+                    }
+                    
                     // Wait for image to load to compute fit scale
                     const init = () => {
                       naturalW = modalImg.naturalWidth || modalImg.width || 1;
@@ -664,13 +846,23 @@ class EnhancedHTMLExporter {
             });
             
             // Close modal
-            closeBtn.addEventListener('click', function() {
+            function closeModal() {
                 modal.style.display = 'none';
-            });
+                // Clean up GIF controller
+                if (modalGifController) {
+                    modalGifController.destroy();
+                    modalGifController = null;
+                }
+                if (gifControls) {
+                    gifControls.style.display = 'none';
+                }
+            }
+            
+            closeBtn.addEventListener('click', closeModal);
             
             modal.addEventListener('click', function(e) {
                 if (e.target === modal) {
-                    modal.style.display = 'none';
+                    closeModal();
                 }
             });
             
@@ -798,10 +990,30 @@ class EnhancedHTMLExporter {
                 }
             }
 
-            // Close on Escape
+            // Keyboard controls
             window.addEventListener('keydown', function(e) {
+                if (modal.style.display !== 'block') return;
+                
                 if (e.key === 'Escape') {
-                    modal.style.display = 'none';
+                    closeModal();
+                } else if (e.key === ' ' || e.key === 'Spacebar') {
+                    // Space to toggle GIF play/pause
+                    if (modalGifController) {
+                        e.preventDefault();
+                        gifTogglePlay();
+                    }
+                } else if (e.key === 'ArrowLeft') {
+                    // Left arrow for previous frame
+                    if (modalGifController) {
+                        e.preventDefault();
+                        gifPrevFrame();
+                    }
+                } else if (e.key === 'ArrowRight') {
+                    // Right arrow for next frame
+                    if (modalGifController) {
+                        e.preventDefault();
+                        gifNextFrame();
+                    }
                 }
             });
 
@@ -813,9 +1025,601 @@ class EnhancedHTMLExporter {
                 }
             });
         }
+        
+        // ========== Modal GIF Controller ==========
+        // Handles GIF frame-by-frame navigation in the modal
+        
+        function initModalGifController(gifSrc) {
+            // Clean up any existing controller
+            if (modalGifController) {
+                modalGifController.destroy();
+            }
+            
+            modalGifController = new ModalGifController(gifSrc);
+        }
+        
+        class ModalGifController {
+            constructor(src) {
+                this.src = src;
+                this.frames = [];
+                this.delays = [];
+                this.currentFrame = 0;
+                this.isPlaying = true;
+                this.animationTimer = null;
+                this.modalImg = document.getElementById('modalImage');
+                this.playPauseBtn = document.getElementById('gifPlayPauseBtn');
+                this.frameCounter = document.getElementById('gifFrameCounter');
+                this.canvas = null;
+                this.ctx = null;
+                
+                this.init();
+            }
+            
+            async init() {
+                try {
+                    const response = await fetch(this.src);
+                    const buffer = await response.arrayBuffer();
+                    await this.parseGifFrames(buffer);
+                    
+                    if (this.frames.length > 1) {
+                        this.setupCanvas();
+                        this.updateFrameCounter();
+                        this.play();
+                    } else {
+                        // Hide controls if not animated
+                        document.getElementById('gifModalControls').style.display = 'none';
+                    }
+                } catch (error) {
+                    console.warn('Could not parse GIF for modal controls:', error);
+                    document.getElementById('gifModalControls').style.display = 'none';
+                }
+            }
+            
+            async parseGifFrames(buffer) {
+                const bytes = new Uint8Array(buffer);
+                
+                // Check GIF signature
+                const signature = String.fromCharCode(...bytes.slice(0, 6));
+                if (!signature.startsWith('GIF')) {
+                    throw new Error('Not a valid GIF file');
+                }
+                
+                const width = bytes[6] | (bytes[7] << 8);
+                const height = bytes[8] | (bytes[9] << 8);
+                
+                this.width = width;
+                this.height = height;
+                this.frames = [];
+                this.delays = [];
+                
+                // Create rendering canvas
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                
+                let previousImageData = null;
+                let pos = 10;
+                const flags = bytes[pos];
+                const hasGlobalColorTable = (flags & 0x80) !== 0;
+                const globalColorTableSize = hasGlobalColorTable ? Math.pow(2, (flags & 0x07) + 1) : 0;
+                pos = 13;
+                
+                let globalColorTable = [];
+                if (hasGlobalColorTable) {
+                    for (let i = 0; i < globalColorTableSize; i++) {
+                        globalColorTable.push([bytes[pos++], bytes[pos++], bytes[pos++]]);
+                    }
+                }
+                
+                let delay = 100;
+                let disposalMethod = 0;
+                let transparentIndex = -1;
+                
+                while (pos < bytes.length) {
+                    const blockType = bytes[pos++];
+                    
+                    if (blockType === 0x21) {
+                        const extType = bytes[pos++];
+                        
+                        if (extType === 0xF9) {
+                            const blockSize = bytes[pos++];
+                            const packedByte = bytes[pos];
+                            disposalMethod = (packedByte >> 2) & 0x07;
+                            const hasTransparency = (packedByte & 0x01) !== 0;
+                            delay = (bytes[pos + 1] | (bytes[pos + 2] << 8)) * 10;
+                            if (delay === 0) delay = 100;
+                            transparentIndex = hasTransparency ? bytes[pos + 3] : -1;
+                            pos += blockSize + 1;
+                        } else {
+                            while (bytes[pos] !== 0) {
+                                pos += bytes[pos] + 1;
+                            }
+                            pos++;
+                        }
+                    } else if (blockType === 0x2C) {
+                        const left = bytes[pos] | (bytes[pos + 1] << 8);
+                        const top = bytes[pos + 2] | (bytes[pos + 3] << 8);
+                        const imgWidth = bytes[pos + 4] | (bytes[pos + 5] << 8);
+                        const imgHeight = bytes[pos + 6] | (bytes[pos + 7] << 8);
+                        const imgFlags = bytes[pos + 8];
+                        pos += 9;
+                        
+                        const hasLocalColorTable = (imgFlags & 0x80) !== 0;
+                        const interlaced = (imgFlags & 0x40) !== 0;
+                        const localColorTableSize = hasLocalColorTable ? Math.pow(2, (imgFlags & 0x07) + 1) : 0;
+                        
+                        let colorTable = globalColorTable;
+                        if (hasLocalColorTable) {
+                            colorTable = [];
+                            for (let i = 0; i < localColorTableSize; i++) {
+                                colorTable.push([bytes[pos++], bytes[pos++], bytes[pos++]]);
+                            }
+                        }
+                        
+                        if (disposalMethod === 2) {
+                            ctx.clearRect(0, 0, width, height);
+                        } else if (disposalMethod === 3 && previousImageData) {
+                            ctx.putImageData(previousImageData, 0, 0);
+                        }
+                        
+                        if (disposalMethod === 3) {
+                            previousImageData = ctx.getImageData(0, 0, width, height);
+                        }
+                        
+                        const minCodeSize = bytes[pos++];
+                        let imageData = [];
+                        while (bytes[pos] !== 0) {
+                            const subBlockSize = bytes[pos++];
+                            for (let i = 0; i < subBlockSize; i++) {
+                                imageData.push(bytes[pos++]);
+                            }
+                        }
+                        pos++;
+                        
+                        const pixels = this.lzwDecode(minCodeSize, imageData);
+                        const frameImageData = ctx.getImageData(0, 0, width, height);
+                        const data = frameImageData.data;
+                        
+                        let pixelIndex = 0;
+                        const deinterlace = interlaced ? this.getDeinterlaceIterator(imgHeight) : null;
+                        
+                        for (let y = 0; y < imgHeight; y++) {
+                            const actualY = interlaced ? deinterlace[y] : y;
+                            for (let x = 0; x < imgWidth; x++) {
+                                const colorIndex = pixels[pixelIndex++];
+                                if (colorIndex !== transparentIndex && colorIndex < colorTable.length) {
+                                    const color = colorTable[colorIndex];
+                                    const offset = ((top + actualY) * width + (left + x)) * 4;
+                                    data[offset] = color[0];
+                                    data[offset + 1] = color[1];
+                                    data[offset + 2] = color[2];
+                                    data[offset + 3] = 255;
+                                }
+                            }
+                        }
+                        
+                        ctx.putImageData(frameImageData, 0, 0);
+                        this.frames.push(ctx.getImageData(0, 0, width, height));
+                        this.delays.push(delay);
+                        
+                        transparentIndex = -1;
+                        delay = 100;
+                        
+                    } else if (blockType === 0x3B) {
+                        break;
+                    } else if (blockType === 0x00) {
+                        continue;
+                    } else {
+                        break;
+                    }
+                }
+            }
+            
+            getDeinterlaceIterator(height) {
+                const rows = [];
+                for (let y = 0; y < height; y += 8) rows.push(y);
+                for (let y = 4; y < height; y += 8) rows.push(y);
+                for (let y = 2; y < height; y += 4) rows.push(y);
+                for (let y = 1; y < height; y += 2) rows.push(y);
+                const lookup = new Array(height);
+                for (let i = 0; i < rows.length; i++) {
+                    lookup[i] = rows[i];
+                }
+                return lookup;
+            }
+            
+            lzwDecode(minCodeSize, data) {
+                const clearCode = 1 << minCodeSize;
+                const eoiCode = clearCode + 1;
+                let codeSize = minCodeSize + 1;
+                let nextCode = eoiCode + 1;
+                let maxCode = 1 << codeSize;
+                
+                let dictionary = [];
+                for (let i = 0; i < clearCode; i++) {
+                    dictionary[i] = [i];
+                }
+                dictionary[clearCode] = [];
+                dictionary[eoiCode] = null;
+                
+                const output = [];
+                let bitBuffer = 0;
+                let bitCount = 0;
+                let dataIndex = 0;
+                
+                function readCode() {
+                    while (bitCount < codeSize && dataIndex < data.length) {
+                        bitBuffer |= data[dataIndex++] << bitCount;
+                        bitCount += 8;
+                    }
+                    const code = bitBuffer & ((1 << codeSize) - 1);
+                    bitBuffer >>= codeSize;
+                    bitCount -= codeSize;
+                    return code;
+                }
+                
+                let prevCode = null;
+                
+                while (dataIndex < data.length || bitCount >= codeSize) {
+                    const code = readCode();
+                    
+                    if (code === clearCode) {
+                        codeSize = minCodeSize + 1;
+                        maxCode = 1 << codeSize;
+                        nextCode = eoiCode + 1;
+                        dictionary = [];
+                        for (let i = 0; i < clearCode; i++) {
+                            dictionary[i] = [i];
+                        }
+                        dictionary[clearCode] = [];
+                        dictionary[eoiCode] = null;
+                        prevCode = null;
+                        continue;
+                    }
+                    
+                    if (code === eoiCode) break;
+                    
+                    let entry;
+                    if (code < nextCode) {
+                        entry = dictionary[code];
+                    } else if (code === nextCode && prevCode !== null) {
+                        entry = dictionary[prevCode].concat(dictionary[prevCode][0]);
+                    } else {
+                        break;
+                    }
+                    
+                    if (entry) {
+                        output.push(...entry);
+                        
+                        if (prevCode !== null && nextCode < 4096) {
+                            dictionary[nextCode++] = dictionary[prevCode].concat(entry[0]);
+                            if (nextCode >= maxCode && codeSize < 12) {
+                                codeSize++;
+                                maxCode = 1 << codeSize;
+                            }
+                        }
+                    }
+                    
+                    prevCode = code;
+                }
+                
+                return output;
+            }
+            
+            setupCanvas() {
+                // Create a hidden canvas to render frames
+                this.canvas = document.createElement('canvas');
+                this.canvas.width = this.width;
+                this.canvas.height = this.height;
+                this.ctx = this.canvas.getContext('2d');
+            }
+            
+            play() {
+                if (this.animationTimer) return;
+                this.isPlaying = true;
+                this.updatePlayButton();
+                this.animate();
+            }
+            
+            pause() {
+                if (this.animationTimer) {
+                    clearTimeout(this.animationTimer);
+                    this.animationTimer = null;
+                }
+                this.isPlaying = false;
+                this.updatePlayButton();
+            }
+            
+            togglePlay() {
+                if (this.isPlaying) {
+                    this.pause();
+                } else {
+                    this.play();
+                }
+            }
+            
+            animate() {
+                if (!this.isPlaying || this.frames.length === 0) return;
+                
+                this.renderFrame(this.currentFrame);
+                this.updateFrameCounter();
+                
+                const delay = this.delays[this.currentFrame] || 100;
+                this.animationTimer = setTimeout(() => {
+                    this.currentFrame = (this.currentFrame + 1) % this.frames.length;
+                    this.animate();
+                }, delay);
+            }
+            
+            renderFrame(index) {
+                if (!this.ctx || !this.frames[index]) return;
+                this.ctx.putImageData(this.frames[index], 0, 0);
+                this.modalImg.src = this.canvas.toDataURL('image/png');
+            }
+            
+            nextFrame() {
+                this.pause();
+                this.currentFrame = (this.currentFrame + 1) % this.frames.length;
+                this.renderFrame(this.currentFrame);
+                this.updateFrameCounter();
+            }
+            
+            prevFrame() {
+                this.pause();
+                this.currentFrame = (this.currentFrame - 1 + this.frames.length) % this.frames.length;
+                this.renderFrame(this.currentFrame);
+                this.updateFrameCounter();
+            }
+            
+            updateFrameCounter() {
+                if (this.frameCounter) {
+                    this.frameCounter.textContent = (this.currentFrame + 1) + ' / ' + this.frames.length;
+                }
+            }
+            
+            updatePlayButton() {
+                if (this.playPauseBtn) {
+                    this.playPauseBtn.textContent = this.isPlaying ? 'Pause' : 'Play';
+                    this.playPauseBtn.title = this.isPlaying ? 'Pause (Space)' : 'Play (Space)';
+                }
+            }
+            
+            destroy() {
+                this.pause();
+                this.frames = [];
+                this.delays = [];
+                this.canvas = null;
+                this.ctx = null;
+            }
+        }
+
+        // Note: Inline GIF controls removed - use modal controls instead
+        // Click on any GIF image to open the modal with playback controls
     </script>
 </body>
 </html>`
+    // ORPHAN_MARKER_START - need to remove orphaned code below
+    const __ORPHAN__ = `
+                        if (hasLocalColorTable) {
+                            colorTable = [];
+                            for (let i = 0; i < localColorTableSize; i++) {
+                                colorTable.push([bytes[pos++], bytes[pos++], bytes[pos++]]);
+                            }
+                        }
+                        
+                        // Handle disposal method
+                        if (disposalMethod === 2) {
+                            // Restore to background
+                            ctx.clearRect(0, 0, width, height);
+                        } else if (disposalMethod === 3 && previousImageData) {
+                            // Restore to previous
+                            ctx.putImageData(previousImageData, 0, 0);
+                        }
+                        
+                        // Save current state if needed for next frame
+                        if (disposalMethod === 3) {
+                            previousImageData = ctx.getImageData(0, 0, width, height);
+                        }
+                        
+                        // Decode LZW compressed image data
+                        const minCodeSize = bytes[pos++];
+                        let imageData = [];
+                        while (bytes[pos] !== 0) {
+                            const subBlockSize = bytes[pos++];
+                            for (let i = 0; i < subBlockSize; i++) {
+                                imageData.push(bytes[pos++]);
+                            }
+                        }
+                        pos++; // Block terminator
+                        
+                        // LZW decode
+                        const pixels = this.lzwDecode(minCodeSize, imageData);
+                        
+                        // Draw pixels to canvas
+                        const frameImageData = ctx.getImageData(0, 0, width, height);
+                        const data = frameImageData.data;
+                        
+                        let pixelIndex = 0;
+                        const deinterlace = interlaced ? this.getDeinterlaceIterator(imgHeight) : null;
+                        
+                        for (let y = 0; y < imgHeight; y++) {
+                            const actualY = interlaced ? deinterlace[y] : y;
+                            for (let x = 0; x < imgWidth; x++) {
+                                const colorIndex = pixels[pixelIndex++];
+                                if (colorIndex !== transparentIndex && colorIndex < colorTable.length) {
+                                    const color = colorTable[colorIndex];
+                                    const offset = ((top + actualY) * width + (left + x)) * 4;
+                                    data[offset] = color[0];
+                                    data[offset + 1] = color[1];
+                                    data[offset + 2] = color[2];
+                                    data[offset + 3] = 255;
+                                }
+                            }
+                        }
+                        
+                        ctx.putImageData(frameImageData, 0, 0);
+                        
+                        // Store the frame
+                        this.frames.push(ctx.getImageData(0, 0, width, height));
+                        this.delays.push(delay);
+                        
+                        // Reset for next frame
+                        transparentIndex = -1;
+                        delay = 100;
+                        
+                    } else if (blockType === 0x3B) {
+                        // Trailer - end of GIF
+                        break;
+                    } else if (blockType === 0x00) {
+                        // Skip null bytes
+                        continue;
+                    } else {
+                        // Unknown block, try to skip
+                        break;
+                    }
+                }
+            }
+            
+            getDeinterlaceIterator(height) {
+                const rows = [];
+                // Pass 1: rows 0, 8, 16, ...
+                for (let y = 0; y < height; y += 8) rows.push(y);
+                // Pass 2: rows 4, 12, 20, ...
+                for (let y = 4; y < height; y += 8) rows.push(y);
+                // Pass 3: rows 2, 6, 10, ...
+                for (let y = 2; y < height; y += 4) rows.push(y);
+                // Pass 4: rows 1, 3, 5, ...
+                for (let y = 1; y < height; y += 2) rows.push(y);
+                
+                // Create reverse lookup
+                const lookup = new Array(height);
+                for (let i = 0; i < rows.length; i++) {
+                    lookup[i] = rows[i];
+                }
+                return lookup;
+            }
+            
+            lzwDecode(minCodeSize, data) {
+                const clearCode = 1 << minCodeSize;
+                const eoiCode = clearCode + 1;
+                let codeSize = minCodeSize + 1;
+                let nextCode = eoiCode + 1;
+                let maxCode = 1 << codeSize;
+                
+                // Initialize dictionary
+                let dictionary = [];
+                for (let i = 0; i < clearCode; i++) {
+                    dictionary[i] = [i];
+                }
+                dictionary[clearCode] = [];
+                dictionary[eoiCode] = null;
+                
+                const output = [];
+                let bitBuffer = 0;
+                let bitCount = 0;
+                let dataIndex = 0;
+                
+                function readCode() {
+                    while (bitCount < codeSize && dataIndex < data.length) {
+                        bitBuffer |= data[dataIndex++] << bitCount;
+                        bitCount += 8;
+                    }
+                    const code = bitBuffer & ((1 << codeSize) - 1);
+                    bitBuffer >>= codeSize;
+                    bitCount -= codeSize;
+                    return code;
+                }
+                
+                let prevCode = null;
+                
+                while (dataIndex < data.length || bitCount >= codeSize) {
+                    const code = readCode();
+                    
+                    if (code === clearCode) {
+                        // Reset
+                        codeSize = minCodeSize + 1;
+                        maxCode = 1 << codeSize;
+                        nextCode = eoiCode + 1;
+                        dictionary = [];
+                        for (let i = 0; i < clearCode; i++) {
+                            dictionary[i] = [i];
+                        }
+                        dictionary[clearCode] = [];
+                        dictionary[eoiCode] = null;
+                        prevCode = null;
+                        continue;
+                    }
+                    
+                    if (code === eoiCode) {
+                        break;
+                    }
+                    
+                    let entry;
+                    if (code < nextCode) {
+                        entry = dictionary[code];
+                    } else if (code === nextCode && prevCode !== null) {
+                        entry = dictionary[prevCode].concat(dictionary[prevCode][0]);
+                    } else {
+                        console.warn('Invalid LZW code');
+                        break;
+                    }
+                    
+                    if (entry) {
+                        output.push(...entry);
+                        
+                        if (prevCode !== null && nextCode < 4096) {
+                            dictionary[nextCode++] = dictionary[prevCode].concat(entry[0]);
+                            if (nextCode >= maxCode && codeSize < 12) {
+                                codeSize++;
+                                maxCode = 1 << codeSize;
+                            }
+                        }
+                    }
+                    
+                    prevCode = code;
+                }
+                
+                return output;
+            }
+            
+            createUI() {
+                // Create container
+                this.container = document.createElement('div');
+                this.container.className = 'gif-container has-controls';
+                
+                // Create canvas
+                this.canvas = document.createElement('canvas');
+                if (this.frames.length > 0) {
+                    this.canvas.width = this.frames[0].width;
+                    this.canvas.height = this.frames[0].height;
+                }
+                this.ctx = this.canvas.getContext('2d');
+                
+                // Create GIF badge
+                const badge = document.createElement('span');
+                badge.className = 'gif-badge';
+                badge.textContent = 'GIF';
+                
+                // Create controls
+                this.controls = document.createElement('div');
+                this.controls.className = 'gif-controls';
+                this.controls.innerHTML = \`
+                    <button class="gif-prev" title="Previous frame (←)">◀◀</button>
+                    <button class="gif-playpause" title="Play/Pause (Space)">⏸</button>
+                    <button class="gif-next" title="Next frame (→)">▶▶</button>
+                    <span class="frame-info">1 / \${this.frames.length}</span>
+                \`;
+                
+                // Prevent click events on controls from propagating to canvas
+                this.controls.addEventListener('click', (e) => e.stopPropagation());
+                
+                // Add event listeners
+                this.controls.querySelector('.gif-prev').addEventListener('click', () => this.prevFrame());
+                this.controls.querySelector('.gif-playpause').addEventListener('click', () => this.togglePlay());
+                this.controls.querySelector('.gif-next').addEventListener('click', () => this.nextFrame());
+                
+`; // End orphan string
     
     console.log('[EnhancedHTML] Template loaded, length:', this.template.length)
     console.log('[EnhancedHTML] Template contains {{PROJECT_TITLE}}:', this.template.includes('{{PROJECT_TITLE}}'))

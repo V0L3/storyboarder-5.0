@@ -119,13 +119,10 @@ class ExportIntegration {
         videoGroups: videoGroups.map(g => ({ name: g.name, boardIds: g.boardIds, firstBoard: g.boardIds[0] }))
       })
       
-      // Generate enhanced PDF
-      const outputPath = await this.generateEnhancedExport(config)
-      
-      // Export GIFs if requested
+      // Export GIFs FIRST if requested (so they exist when PDF is generated)
       if (config.exportGifWithPdf && videoGroups.length > 0) {
-        console.log('[ExportIntegration.handleEnhancedExport] Exporting GIFs alongside PDF...')
-        this.showNotification('Exporting GIFs alongside PDF...', 'info')
+        console.log('[ExportIntegration.handleEnhancedExport] Exporting GIFs BEFORE PDF...')
+        this.showNotification('Generating GIFs...', 'info')
         
         try {
           // Create GIF config with same settings as PDF
@@ -148,9 +145,13 @@ class ExportIntegration {
           console.log(`[ExportIntegration.handleEnhancedExport] Successfully exported ${gifExportedCount} GIFs`)
         } catch (gifError) {
           console.error('[ExportIntegration.handleEnhancedExport] Error exporting GIFs:', gifError)
-          this.showNotification(`PDF exported successfully, but GIF export failed: ${gifError.message}`, 'warning')
+          this.showNotification(`GIF export failed: ${gifError.message}. Continuing with PDF export...`, 'warning')
         }
       }
+      
+      // Now generate enhanced PDF (GIFs should now exist for embedding)
+      this.showNotification('Generating PDF...', 'info')
+      const outputPath = await this.generateEnhancedExport(config)
       
       // Show success notification
       const successMessage = config.exportGifWithPdf && videoGroups.length > 0 
@@ -411,6 +412,10 @@ class ExportIntegration {
       throw new Error(`Invalid group data for group: ${group?.name || 'unknown'}`)
     }
 
+    // Calculate the frame duration based on group FPS
+    const groupFps = group.fps || config.gifSettings?.fps || 5
+    const groupFrameDuration = 1000 / groupFps // Convert FPS to milliseconds
+    
     // Get boards for this group using boardIds
     const groupBoards = group.boardIds.map(index => {
       if (index < 0 || index >= this.boardData.boards.length) {
@@ -419,10 +424,16 @@ class ExportIntegration {
       }
       const board = { ...this.boardData.boards[index] } // Create a copy to avoid modifying original
       
-      // Apply custom frame timing if available
-      if (group.boardTimings && group.boardTimings[index] !== undefined) {
+      // Apply timing based on mode:
+      // 1. If advanced mode with custom board timings, use those
+      // 2. Otherwise, use the group's FPS setting (clear individual board duration)
+      if (group.advancedMode && group.boardTimings && group.boardTimings[index] !== undefined) {
         board.duration = group.boardTimings[index] * 1000 // Convert seconds to milliseconds
         console.log(`[ExportIntegration] Applied custom timing for board ${index}: ${group.boardTimings[index]}s`)
+      } else {
+        // Use group FPS - delete individual board duration so defaultBoardTiming is used
+        delete board.duration
+        console.log(`[ExportIntegration] Using group FPS (${groupFps}) for board ${index}: ${groupFrameDuration}ms`)
       }
       
       return board
@@ -670,17 +681,7 @@ class ExportIntegration {
       const filename = `${basename} ${timestamp}.${extension}`
       const outputPath = path.join(exportsDir, filename)
       
-      // Import the appropriate exporter
-      if (exportFormat === 'html') {
-        const { generateEnhancedHTML } = require('../exporters/enhanced-html')
-        exportConfig.outputPath = outputPath // Pass output path for relative image paths
-        await generateEnhancedHTML(exportConfig, this.boardData, this.boardFilename, outputPath)
-      } else {
-        const { generateEnhancedPDF } = require('../exporters/enhanced-pdf')
-        await generateEnhancedPDF(exportConfig, this.boardData, this.boardFilename, outputPath)
-      }
-      
-      // Export GIFs if requested
+      // Export GIFs FIRST if requested (so they exist when HTML/PDF is generated)
       console.log('[ExportIntegration.handleAdvancedPDFExport] GIF export check:', {
         exportGifWithPdf: config.exportGifWithPdf,
         videoGroupsLength: videoGroups.length,
@@ -688,8 +689,8 @@ class ExportIntegration {
       })
       
       if (config.exportGifWithPdf && videoGroups.length > 0) {
-        console.log('[ExportIntegration.handleAdvancedPDFExport] Exporting GIFs alongside PDF...')
-        this.showNotification('Exporting GIFs alongside PDF...', 'info')
+        console.log('[ExportIntegration.handleAdvancedPDFExport] Exporting GIFs BEFORE HTML/PDF...')
+        this.showNotification('Generating GIFs...', 'info')
         
         try {
           // Create GIF config with same settings as PDF
@@ -699,7 +700,7 @@ class ExportIntegration {
               resolution: config.gifSettings?.resolution || '1440',
               includeDialogue: config.gifSettings?.includeDialogue || false
             },
-            openFolder: false // Don't open folder for GIFs since we'll open it for PDF
+            openFolder: false // Don't open folder for GIFs since we'll open it for PDF/HTML
           }
           
           // Export all video groups as GIFs
@@ -712,8 +713,20 @@ class ExportIntegration {
           console.log(`[ExportIntegration.handleAdvancedPDFExport] Successfully exported ${gifExportedCount} GIFs`)
         } catch (gifError) {
           console.error('[ExportIntegration.handleAdvancedPDFExport] Error exporting GIFs:', gifError)
-          this.showNotification(`PDF exported successfully, but GIF export failed: ${gifError.message}`, 'warning')
+          this.showNotification(`GIF export failed: ${gifError.message}. Continuing with ${formatName} export...`, 'warning')
         }
+      }
+      
+      // Now generate the HTML/PDF (GIFs should now exist for embedding)
+      this.showNotification(`Generating ${formatName}...`, 'info')
+      
+      if (exportFormat === 'html') {
+        const { generateEnhancedHTML } = require('../exporters/enhanced-html')
+        exportConfig.outputPath = outputPath // Pass output path for relative image paths
+        await generateEnhancedHTML(exportConfig, this.boardData, this.boardFilename, outputPath)
+      } else {
+        const { generateEnhancedPDF } = require('../exporters/enhanced-pdf')
+        await generateEnhancedPDF(exportConfig, this.boardData, this.boardFilename, outputPath)
       }
       
       // Show debug info if available

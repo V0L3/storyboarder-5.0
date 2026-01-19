@@ -438,6 +438,8 @@ const load = async (event, args) => {
         window.boardData = boardData
         window.currentBoard = currentBoard
         window.boardFilename = boardFilename
+        // Expose markBoardFileDirty so VideoGroupManager can mark project dirty when groups change
+        window.markBoardFileDirty = markBoardFileDirty
         
         // Validate boardData structure
         if (!boardData) {
@@ -1692,6 +1694,10 @@ const loadBoardUI = async () => {
 
       if (!util.isUndefined(index)) {
         log.info('user requests move operation:', selections, 'to insert after', index)
+        
+        // Store Ctrl key state before async operation
+        const ctrlKeyHeld = e.ctrlKey || e.metaKey
+        
         saveImageFile().then(() => {
           // Check if dropping on a group divider
           let dividerInfo = null
@@ -1703,8 +1709,7 @@ const loadBoardUI = async () => {
 
       if (didChange) {
         // Handle group joining/leaving based on divider action (with WebGL safety checks)
-        if (dividerInfo && window.exportIntegration && window.exportIntegration.gifGroupManager &&
-            storyboarderSketchPane && storyboarderSketchPane.sketchPane && storyboarderSketchPane.sketchPane.gl) {
+        if (window.exportIntegration && window.exportIntegration.gifGroupManager) {
           const firstSelection = Math.min(...Array.from(selections))
           const groups = window.exportIntegration.gifGroupManager.videoGroupManager.getAllGroups()
 
@@ -1712,28 +1717,49 @@ const loadBoardUI = async () => {
           const draggedBoardGroups = window.exportIntegration.gifGroupManager.videoGroupManager.getGroupsForBoard(firstSelection)
           const isCurrentlyInGroup = draggedBoardGroups.length > 0
 
-          if (dividerInfo.action === 'join-group') {
-            // Find the group to join based on the insertion point
-            const targetGroup = groups.find(group => {
+          // CTRL+DRAG: Join adjacent group when Ctrl is held
+          if (ctrlKeyHeld && !isCurrentlyInGroup) {
+            // Find a group that the board is now adjacent to
+            const adjacentGroup = groups.find(group => {
               const groupStart = Math.min(...group.boardIds)
               const groupEnd = Math.max(...group.boardIds)
-              return (dividerInfo.insertionIndex >= groupStart && dividerInfo.insertionIndex <= groupEnd + 1)
+              // Check if the new position is adjacent to this group
+              return (firstSelection === groupStart - 1) || (firstSelection === groupEnd + 1)
             })
 
-            if (targetGroup) {
-              window.exportIntegration.gifGroupManager.videoGroupManager.addBoardToGroup(targetGroup.id, firstSelection)
+            if (adjacentGroup) {
+              window.exportIntegration.gifGroupManager.videoGroupManager.addBoardToGroup(adjacentGroup.id, firstSelection)
+              window.exportIntegration.gifGroupManager.forceImmediateUpdate()
+              notifications.notify({message: `Added to group "${adjacentGroup.name}"!`, timing: 5})
+            } else {
+              notifications.notify({message: 'Reordered!', timing: 5})
             }
-          } else if (dividerInfo.action === 'leave-group' && isCurrentlyInGroup) {
-            // Remove the board from all its current groups
-            draggedBoardGroups.forEach(group => {
-              window.exportIntegration.gifGroupManager.videoGroupManager.removeBoardFromGroup(group.id, firstSelection)
-            })
-          } else if (dividerInfo.action === 'insert') {
-            // Just insert without changing group membership
-          }
-        }
+          } else if (dividerInfo && storyboarderSketchPane && storyboarderSketchPane.sketchPane && storyboarderSketchPane.sketchPane.gl) {
+            // Handle divider-based actions
+            if (dividerInfo.action === 'join-group') {
+              // Find the group to join based on the insertion point
+              const targetGroup = groups.find(group => {
+                const groupStart = Math.min(...group.boardIds)
+                const groupEnd = Math.max(...group.boardIds)
+                return (dividerInfo.insertionIndex >= groupStart && dividerInfo.insertionIndex <= groupEnd + 1)
+              })
 
+              if (targetGroup) {
+                window.exportIntegration.gifGroupManager.videoGroupManager.addBoardToGroup(targetGroup.id, firstSelection)
+              }
+            } else if (dividerInfo.action === 'leave-group' && isCurrentlyInGroup) {
+              // Remove the board from all its current groups
+              draggedBoardGroups.forEach(group => {
+                window.exportIntegration.gifGroupManager.videoGroupManager.removeBoardFromGroup(group.id, firstSelection)
+              })
+            }
             notifications.notify({message: 'Reordered!', timing: 5})
+          } else {
+            notifications.notify({message: 'Reordered!', timing: 5})
+          }
+        } else {
+          notifications.notify({message: 'Reordered!', timing: 5})
+        }
           }
 
           renderThumbnailDrawer()
@@ -2586,11 +2612,42 @@ const renderScene = async () => {
 
       getAudioBufferByFilename: audioPlayback.getAudioBufferByFilename.bind(audioPlayback),
 
-      onSetCurrentBoardIndex: async index => {
-        if (currentBoard !== index) {
+      onSetCurrentBoardIndex: async (index, modifiers = {}) => {
+        const { altKey, ctrlKey, shiftKey } = modifiers
+        
+        if (altKey) {
+          // Alt+click: Select only this item (clear others)
           await saveImageFile()
+          selections.clear()
+          selections.add(index)
           updateCurrentBoard(index)
-          gotoBoard(currentBoard)
+          gotoBoard(currentBoard, true) // preserve the new single selection
+        } else if (ctrlKey) {
+          // Ctrl+click: Toggle selection
+          if (selections.has(index)) {
+            selections.delete(index)
+            // If we removed the current board, move to another selected board or stay
+            if (currentBoard === index && selections.size > 0) {
+              const newCurrent = Math.min(...Array.from(selections))
+              await saveImageFile()
+              updateCurrentBoard(newCurrent)
+              gotoBoard(currentBoard, true)
+            } else {
+              renderThumbnailDrawerSelections()
+            }
+          } else {
+            selections.add(index)
+            await saveImageFile()
+            updateCurrentBoard(index)
+            gotoBoard(currentBoard, true) // preserve selections
+          }
+        } else {
+          // Normal click: standard behavior
+          if (currentBoard !== index) {
+            await saveImageFile()
+            updateCurrentBoard(index)
+            gotoBoard(currentBoard)
+          }
         }
       },
 
@@ -2721,10 +2778,8 @@ let newBoard = async (position, shouldAddToUndoStack = true) => {
     // Update the group manager's board data reference and force group index update
     window.exportIntegration.gifGroupManager.videoGroupManager.updateBoardDataReference(boardData)
     window.exportIntegration.gifGroupManager.videoGroupManager.forceUpdateAllGroups()
-    // Use batched UI update instead of immediate update
-    window.exportIntegration.gifGroupManager.batchUIUpdates(() => {
-      window.exportIntegration.gifGroupManager.updateTimelineDisplay()
-    })
+    // Use immediate update for instant feedback
+    window.exportIntegration.gifGroupManager.forceImmediateUpdate()
   }
 
   return position
@@ -2789,10 +2844,8 @@ let insertNewBoardsWithFiles = async filepaths => {
   if (numAdded > 0 && typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
     window.exportIntegration.gifGroupManager.videoGroupManager.updateBoardDataReference(boardData)
     window.exportIntegration.gifGroupManager.videoGroupManager.forceUpdateAllGroups()
-    // Use batched UI update instead of immediate update
-    window.exportIntegration.gifGroupManager.batchUIUpdates(() => {
-      window.exportIntegration.gifGroupManager.updateTimelineDisplay()
-    })
+    // Use immediate update for instant feedback
+    window.exportIntegration.gifGroupManager.forceImmediateUpdate()
   }
 
   if (numAdded > 0) {
@@ -3742,10 +3795,8 @@ let deleteSingleBoard = (index) => {
     if (typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
       window.exportIntegration.gifGroupManager.videoGroupManager.updateBoardDataReference(boardData)
       window.exportIntegration.gifGroupManager.videoGroupManager.forceUpdateAllGroups()
-      // Use batched UI update instead of immediate update
-      window.exportIntegration.gifGroupManager.batchUIUpdates(() => {
-        window.exportIntegration.gifGroupManager.updateTimelineDisplay()
-      })
+      // Use immediate update for instant feedback
+      window.exportIntegration.gifGroupManager.forceImmediateUpdate()
     }
     
     markBoardFileDirty()
@@ -3780,10 +3831,8 @@ let deleteBoards = (args)=> {
       if (typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
         window.exportIntegration.gifGroupManager.videoGroupManager.updateBoardDataReference(boardData)
         window.exportIntegration.gifGroupManager.videoGroupManager.forceUpdateAllGroups()
-        // Use batched UI update instead of immediate update
-        window.exportIntegration.gifGroupManager.batchUIUpdates(() => {
-          window.exportIntegration.gifGroupManager.updateTimelineDisplay()
-        })
+        // Use immediate update for instant feedback
+        window.exportIntegration.gifGroupManager.forceImmediateUpdate()
       }
       
       renderThumbnailDrawer()
@@ -3930,10 +3979,8 @@ let duplicateBoard = async () => {
       
       // Force group index update and UI refresh
       groupManager.forceUpdateAllGroups()
-      // Use batched UI update instead of immediate update
-      window.exportIntegration.gifGroupManager.batchUIUpdates(() => {
-        window.exportIntegration.gifGroupManager.updateTimelineDisplay()
-      })
+      // Use immediate update for instant feedback
+      window.exportIntegration.gifGroupManager.forceImmediateUpdate()
     }
 
     // sfx.bip('c7')
@@ -4384,10 +4431,13 @@ const renderMetaDataInternal = () => {
       // show current board
       for (let input of editableInputs) {
         // Disable fields if board is in group but not first
+        // Note: dialogue field should NEVER be disabled
         if (isInGroup && !isFirstInGroup) {
-          input.disabled = (input.name !== 'duration' && input.name !== 'frames')
+          input.disabled = (input.name !== 'duration' && input.name !== 'frames' && input.name !== 'dialogue')
           let label = document.querySelector(`label[for="${input.name}"]`)
-          label && label.classList.add('disabled')
+          if (input.name !== 'dialogue') {
+            label && label.classList.add('disabled')
+          }
         } else {
           input.disabled = false
           let label = document.querySelector(`label[for="${input.name}"]`)
@@ -4401,9 +4451,12 @@ const renderMetaDataInternal = () => {
       document.querySelector('input[name="frames"]').value = msecsToFrames(boardData.boards[currentBoard].duration)
     } else {
       for (let input of editableInputs) {
-        input.disabled = (input.name !== 'duration' && input.name !== 'frames')
+        // Note: dialogue field should NEVER be disabled
+        input.disabled = (input.name !== 'duration' && input.name !== 'frames' && input.name !== 'dialogue')
         let label = document.querySelector(`label[for="${input.name}"]`)
-        label && label.classList.add('disabled')
+        if (input.name !== 'dialogue') {
+          label && label.classList.add('disabled')
+        }
       }
 
       let uniqueDurations = util.uniq(boardData.boards.map(b => b.duration))
@@ -4507,7 +4560,8 @@ const renderMetaDataInternal = () => {
     }
     
     // Always ensure dialogue field is enabled (never affected by group rules)
-    const dialogueField = document.querySelector('input[name="dialogue"]')
+    // Note: dialogue is a textarea, not an input
+    const dialogueField = document.querySelector('textarea[name="dialogue"]')
     if (dialogueField) {
       dialogueField.disabled = false
       const label = document.querySelector(`label[for="dialogue"]`)
@@ -4539,7 +4593,8 @@ const renderMetaDataInternal = () => {
   }
   
   // Force a final UI update to ensure all changes are reflected
-  setTimeout(() => {
+  // Use requestAnimationFrame for smooth, immediate updates without flickering
+  requestAnimationFrame(() => {
     // Trigger any pending UI updates
     if (typeof window !== 'undefined' && window.renderThumbnailDrawer) {
       window.renderThumbnailDrawer()
@@ -4547,9 +4602,9 @@ const renderMetaDataInternal = () => {
     
     // Also update the timeline display if GIF group manager is available
     if (typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
-      window.exportIntegration.gifGroupManager.updateTimelineDisplay()
+      window.exportIntegration.gifGroupManager.updateTimelineDisplay(true) // immediate update
     }
-  }, 150) // Increased delay to 150ms
+  })
 }
 
 const renderCaption = () => {
@@ -5050,6 +5105,11 @@ let renderThumbnailDrawer = () => {
   renderThumbnailButtons()
 
   renderThumbnailDrawerSelections()
+  
+  // Re-apply group indicator data attributes after thumbnail rebuild
+  if (typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
+    window.exportIntegration.gifGroupManager.videoGroupManager.renderGroupIndicators()
+  }
 
   if (!contextMenu) {
     contextMenu = new ContextMenu()
@@ -5139,9 +5199,45 @@ let renderThumbnailDrawer = () => {
       }
 
       let index = Number(e.target.dataset.thumbnail)
-      if (selections.has(index)) {
-        // ignore
-      } else if (isCommandPressed('workspace:thumbnails:select-multiple-modifier')) {
+      
+      // Alt+click: Select only this item (deselect all others)
+      if (e.altKey) {
+        selections.clear()
+        selections.add(index)
+        saveImageFile().then(() => {
+          currentBoard = index
+          renderThumbnailDrawerSelections()
+          gotoBoard(currentBoard, true)
+        })
+      }
+      // Ctrl+click (or Cmd+click): Toggle selection
+      else if (e.ctrlKey || e.metaKey) {
+        if (selections.has(index)) {
+          // Deselect this item
+          selections.delete(index)
+          // If we removed the current board and others are selected, move to first selected
+          if (currentBoard === index && selections.size > 0) {
+            const newCurrent = Math.min(...Array.from(selections))
+            saveImageFile().then(() => {
+              currentBoard = newCurrent
+              renderThumbnailDrawerSelections()
+              gotoBoard(currentBoard, true)
+            })
+          } else {
+            renderThumbnailDrawerSelections()
+          }
+        } else {
+          // Add to selection
+          selections.add(index)
+          saveImageFile().then(() => {
+            currentBoard = index
+            renderThumbnailDrawerSelections()
+            gotoBoard(currentBoard, true)
+          })
+        }
+      }
+      // Shift+click: Range selection (existing behavior)
+      else if (isCommandPressed('workspace:thumbnails:select-multiple-modifier')) {
         if (selections.size === 0 && !util.isUndefined(currentBoard)) {
           // use currentBoard as starting point
           selections.add(currentBoard)
@@ -5153,6 +5249,17 @@ let renderThumbnailDrawer = () => {
         selections = new Set(util.range(min, max))
 
         renderThumbnailDrawerSelections()
+      } 
+      // Normal click: standard behavior
+      else if (selections.has(index)) {
+        // Already selected - just go to it without clearing selection
+        if (currentBoard !== index) {
+          saveImageFile().then(() => {
+            currentBoard = index
+            renderThumbnailDrawerSelections()
+            gotoBoard(currentBoard, true)
+          })
+        }
       } else if (currentBoard !== index) {
         // go to board by index
 
@@ -5819,7 +5926,8 @@ window.onkeydown = (e) => {
       previousScene()
     } else if (isCommandPressed("menu:boards:reorder-left")) {
       e.preventDefault()
-      reorderBoardsLeft()
+      // Pass Ctrl key state to join adjacent group
+      reorderBoardsLeft(e.ctrlKey || e.metaKey)
     } else if (isCommandPressed("menu:navigation:previous-board")) {
       e.preventDefault()
       let shouldPreserveSelections = isCommandPressed("workspace:thumbnails:select-multiple-modifier")
@@ -5834,7 +5942,8 @@ window.onkeydown = (e) => {
       nextScene()
     } else if (isCommandPressed("menu:boards:reorder-right")) {
       e.preventDefault()
-      reorderBoardsRight()
+      // Pass Ctrl key state to join adjacent group
+      reorderBoardsRight(e.ctrlKey || e.metaKey)
     } else if (isCommandPressed("menu:navigation:next-board")) {
       e.preventDefault()
       let shouldPreserveSelections = isCommandPressed("workspace:thumbnails:select-multiple-modifier")
@@ -6697,10 +6806,8 @@ let pasteBoards = async () => {
       if (typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
         window.exportIntegration.gifGroupManager.videoGroupManager.updateBoardDataReference(boardData)
         window.exportIntegration.gifGroupManager.videoGroupManager.forceUpdateAllGroups()
-        // Use batched UI update instead of immediate update
-        window.exportIntegration.gifGroupManager.batchUIUpdates(() => {
-          window.exportIntegration.gifGroupManager.updateTimelineDisplay()
-        })
+        // Use immediate update for instant feedback
+        window.exportIntegration.gifGroupManager.forceImmediateUpdate()
       }
 
       log.info('paste complete')
@@ -6889,10 +6996,8 @@ const insertBoards = async (dest, insertAt, boards, { layerDataByBoardIndex }) =
   if (typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
     window.exportIntegration.gifGroupManager.videoGroupManager.updateBoardDataReference(dest)
     window.exportIntegration.gifGroupManager.videoGroupManager.forceUpdateAllGroups()
-    // Use batched UI update instead of immediate update
-    window.exportIntegration.gifGroupManager.batchUIUpdates(() => {
-      window.exportIntegration.gifGroupManager.updateTimelineDisplay()
-    })
+    // Use immediate update for instant feedback
+    window.exportIntegration.gifGroupManager.forceImmediateUpdate()
   }
 }
 
@@ -7067,13 +7172,12 @@ let moveSelectedBoards = position => {
       
       fs.appendFileSync(logPath, `[${new Date().toISOString()}] ===== BOARD MOVEMENT DEBUG END =====\n`)
       
-      window.exportIntegration.gifGroupManager.updateTimelineDisplay()
+      // Use immediate update after board movement for instant feedback
+      window.exportIntegration.gifGroupManager.forceImmediateUpdate()
       
       // Update the metadata UI to reflect group changes
       if (typeof window !== 'undefined' && window.renderMetaData) {
-        setTimeout(() => {
-          window.renderMetaData()
-        }, 100)
+        window.renderMetaData()
       }
     } else {
       const fs = require('fs')
@@ -7093,13 +7197,40 @@ let moveSelectedBoards = position => {
   return didChange
 }
 
-let reorderBoardsLeft = () => {
+let reorderBoardsLeft = (joinGroup = false) => {
   let selectionsAsArray = [...selections].sort(util.compareNumbers)
   let leftMost = selectionsAsArray[0]
   let position = leftMost - 1
   if (position >= 0) {
     saveImageFile()
     moveSelectedBoards(position)
+    
+    // Check if Ctrl was held and board should join an adjacent group
+    if (joinGroup && window.exportIntegration && window.exportIntegration.gifGroupManager) {
+      const firstSelection = Math.min(...Array.from(selections))
+      const groups = window.exportIntegration.gifGroupManager.videoGroupManager.getAllGroups()
+      const draggedBoardGroups = window.exportIntegration.gifGroupManager.videoGroupManager.getGroupsForBoard(firstSelection)
+      const isCurrentlyInGroup = draggedBoardGroups.length > 0
+      
+      if (!isCurrentlyInGroup) {
+        // Find a group that the board is now adjacent to (at the end, since we moved left)
+        const adjacentGroup = groups.find(group => {
+          const groupEnd = Math.max(...group.boardIds)
+          return firstSelection === groupEnd + 1
+        })
+        
+        if (adjacentGroup) {
+          window.exportIntegration.gifGroupManager.videoGroupManager.addBoardToGroup(adjacentGroup.id, firstSelection)
+          window.exportIntegration.gifGroupManager.forceImmediateUpdate()
+          notifications.notify({message: `Added to group "${adjacentGroup.name}"!`, timing: 5})
+          renderThumbnailDrawer()
+          gotoBoard(currentBoard, true)
+          sfx.playEffect('on')
+          return
+        }
+      }
+    }
+    
     renderThumbnailDrawer()
     gotoBoard(currentBoard, true)
     sfx.playEffect('on')
@@ -7107,13 +7238,40 @@ let reorderBoardsLeft = () => {
   }
 }
 
-let reorderBoardsRight = () => {
+let reorderBoardsRight = (joinGroup = false) => {
   let selectionsAsArray = [...selections].sort(util.compareNumbers)
   let rightMost = selectionsAsArray.slice(-1)[0] + 1
   let position = rightMost + 1
   if (position <= boardData.boards.length) {
     saveImageFile()
     moveSelectedBoards(position)
+    
+    // Check if Ctrl was held and board should join an adjacent group
+    if (joinGroup && window.exportIntegration && window.exportIntegration.gifGroupManager) {
+      const firstSelection = Math.min(...Array.from(selections))
+      const groups = window.exportIntegration.gifGroupManager.videoGroupManager.getAllGroups()
+      const draggedBoardGroups = window.exportIntegration.gifGroupManager.videoGroupManager.getGroupsForBoard(firstSelection)
+      const isCurrentlyInGroup = draggedBoardGroups.length > 0
+      
+      if (!isCurrentlyInGroup) {
+        // Find a group that the board is now adjacent to (at the start, since we moved right)
+        const adjacentGroup = groups.find(group => {
+          const groupStart = Math.min(...group.boardIds)
+          return firstSelection === groupStart - 1
+        })
+        
+        if (adjacentGroup) {
+          window.exportIntegration.gifGroupManager.videoGroupManager.addBoardToGroup(adjacentGroup.id, firstSelection)
+          window.exportIntegration.gifGroupManager.forceImmediateUpdate()
+          notifications.notify({message: `Added to group "${adjacentGroup.name}"!`, timing: 5})
+          renderThumbnailDrawer()
+          gotoBoard(currentBoard, true)
+          sfx.playEffect('metal')
+          return
+        }
+      }
+    }
+    
     renderThumbnailDrawer()
     gotoBoard(currentBoard, true)
     sfx.playEffect('metal')
@@ -7487,12 +7645,19 @@ const applyUndoStateForScene = async (state) => {
       window.exportIntegration.gifGroupManager.videoGroupManager.updateBoardDataReference(boardData)
       window.exportIntegration.gifGroupManager.videoGroupManager.restoreFromState(boardData.gifGroupsState)
       window.exportIntegration.gifGroupManager.updateGroupsList()
-      window.exportIntegration.gifGroupManager.updateTimelineDisplay()
+      // Use immediate update for instant feedback after undo/redo
+      window.exportIntegration.gifGroupManager.forceImmediateUpdate()
     }
   } else {
-    // Even if there's no group state, update the board data reference
+    // Even if there's no group state, update the board data reference and validate groups
     if (typeof window !== 'undefined' && window.exportIntegration && window.exportIntegration.gifGroupManager) {
+      console.log('[MainWindow] No GIF group state in undo - updating board reference and validating groups')
       window.exportIntegration.gifGroupManager.videoGroupManager.updateBoardDataReference(boardData)
+      // Force update groups to ensure indices match the restored board data
+      window.exportIntegration.gifGroupManager.videoGroupManager.forceUpdateAllGroups()
+      window.exportIntegration.gifGroupManager.updateGroupsList()
+      // Use immediate update for instant feedback after undo/redo
+      window.exportIntegration.gifGroupManager.forceImmediateUpdate()
     }
   }
   
@@ -8163,21 +8328,12 @@ document.addEventListener('keydown', (e) => {
     return false
   }
   if (isEditableTarget(e.target)) return
-  // Ctrl+G: Group selected boards
-  if (e.ctrlKey && !e.shiftKey && e.key === 'G') {
+  // Ctrl+G: Group selected boards or open group manager
+  if (e.ctrlKey && !e.shiftKey && e.key === 'G' && !e.repeat) {
     e.preventDefault()
     try {
       const integration = ensureExportIntegration()
       if (integration && integration.gifGroupManager) {
-        // Check if user has manually opened the grouping menu before
-        const hasManuallyOpenedMenu = localStorage.getItem('storyboarder_has_manually_opened_grouping_menu') === 'true'
-        
-        // If not in grouping mode, start it (but only if user has manually opened it before)
-        if (!integration.gifGroupManager.isGroupingMode && hasManuallyOpenedMenu) {
-          integration.gifGroupManager.toggleGroupingMode()
-        }
-      // Small delay to ensure selections are updated
-      setTimeout(() => {
         // Force sync selections first
         if (integration.gifGroupManager.syncWithMainSelections) {
           integration.gifGroupManager.syncWithMainSelections()
@@ -8185,26 +8341,18 @@ document.addEventListener('keydown', (e) => {
         
         // Check both programmatic selections and visual selections
         const programmaticCount = window.selections ? window.selections.size : 0
-
-        // Also check visual selections (boards that have the 'selected' class)
         const visualSelections = document.querySelectorAll('.thumbnail.selected, .t-scene.selected')
         const visualCount = visualSelections.length
-
-        console.log('Programmatic selections:', Array.from(window.selections || []), 'Count:', programmaticCount)
-        console.log('Visual selections found:', visualCount)
-
-        // Use the higher count to be more permissive
         const effectiveCount = Math.max(programmaticCount, visualCount)
 
         if (effectiveCount >= 2) {
+          // 2+ boards selected: create a group
           integration.gifGroupManager.createGroupFromSelection()
         } else {
-          notifications.notify({
-            message: `Select at least 2 boards to create a group (${effectiveCount} selected). Hold Shift and click boards.`,
-            timing: 3
-          })
+          // 0-1 boards selected: toggle the group manager panel
+          localStorage.setItem('storyboarder_has_manually_opened_grouping_menu', 'true')
+          integration.gifGroupManager.toggleGroupingMode()
         }
-      }, 150) // Slightly longer delay for better stability
       } else {
         console.log('Export integration not available')
       }

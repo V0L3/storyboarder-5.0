@@ -951,7 +951,12 @@ class TimelineView {
   async onBoardPointerDown (event, boardView) {
     let index = this.scene.boards.indexOf(boardView.board)
 
-    this.onSetCurrentBoardIndex(index)
+    // Pass modifier key info to the callback
+    this.onSetCurrentBoardIndex(index, {
+      altKey: event.altKey,
+      ctrlKey: event.ctrlKey || event.metaKey,
+      shiftKey: event.shiftKey
+    })
 
     if (event.target === boardView.refs.handle) {
       this.state.resizableBoardView = boardView

@@ -1073,6 +1073,7 @@ class VideoGroupManager {
     
     let updatedCount = 0
     let removedCount = 0
+    let expandedCount = 0
     const groups = Array.from(this.groups.values())
     
     for (const group of groups) {
@@ -1087,12 +1088,82 @@ class VideoGroupManager {
           continue
         }
         
-        // Update UIDs to match current board data
-        const currentUids = this.getBoardUidsFromIndices(newBoardIds)
-        group.boardUids = currentUids
-        group.boardIds = newBoardIds
+        // Sort the indices to ensure proper order
+        const sortedBoardIds = [...newBoardIds].sort((a, b) => a - b)
         
-        updatedCount++
+        // Check if boards are still adjacent after the move
+        if (!this.areBoardsAdjacent(sortedBoardIds)) {
+          // Boards are no longer adjacent - check if new boards were inserted in between
+          const minIndex = Math.min(...sortedBoardIds)
+          const maxIndex = Math.max(...sortedBoardIds)
+          
+          // Find indices that are missing from the group (these are newly inserted boards)
+          const missingIndices = []
+          for (let i = minIndex; i <= maxIndex; i++) {
+            if (!sortedBoardIds.includes(i)) {
+              missingIndices.push(i)
+            }
+          }
+          
+          // Check if all missing indices are valid board positions (new boards inserted in between)
+          const validMissingIndices = missingIndices.filter(i => 
+            i >= 0 && i < this.boardData.boards.length && this.boardData.boards[i]
+          )
+          
+          if (validMissingIndices.length > 0 && validMissingIndices.length === missingIndices.length) {
+            // New boards were inserted in between - add them to the group
+            const allIndices = [...sortedBoardIds, ...validMissingIndices].sort((a, b) => a - b)
+            const allUids = this.getBoardUidsFromIndices(allIndices)
+            
+            group.boardIds = allIndices
+            group.boardUids = allUids
+            
+            // Handle newShot flags for the newly added boards
+            this.handleNewShotFlags(allIndices)
+            
+            console.log(`[VideoGroupManager.updateGroupIndices] Group ${group.id} expanded to include inserted boards: [${allIndices.join(', ')}]`)
+            expandedCount++
+            updatedCount++
+          } else {
+            // Boards were moved OUT of the group - keep the largest contiguous segment
+            const contiguousSegments = this.findContiguousSegments(sortedBoardIds)
+            
+            if (contiguousSegments.length === 0) {
+              // No valid segments, remove the group
+              this.groups.delete(group.id)
+              removedCount++
+              console.log(`[VideoGroupManager.updateGroupIndices] Removed group ${group.id} - no contiguous segments`)
+              continue
+            }
+            
+            // Keep the largest contiguous segment
+            const largestSegment = contiguousSegments.reduce((largest, segment) => 
+              segment.length > largest.length ? segment : largest
+            , contiguousSegments[0])
+            
+            // If the largest segment has only 1 board, remove the group
+            if (largestSegment.length <= 1) {
+              this.groups.delete(group.id)
+              removedCount++
+              console.log(`[VideoGroupManager.updateGroupIndices] Removed group ${group.id} - only 1 board remains`)
+              continue
+            }
+            
+            // Update group with the largest contiguous segment
+            const segmentUids = this.getBoardUidsFromIndices(largestSegment)
+            group.boardIds = largestSegment
+            group.boardUids = segmentUids
+            
+            console.log(`[VideoGroupManager.updateGroupIndices] Group ${group.id} fragmented - kept segment [${largestSegment.join(', ')}]`)
+            updatedCount++
+          }
+        } else {
+          // Boards are still adjacent, update normally
+          const currentUids = this.getBoardUidsFromIndices(sortedBoardIds)
+          group.boardUids = currentUids
+          group.boardIds = sortedBoardIds
+          updatedCount++
+        }
       } else {
         // For groups without UIDs, try to generate them
         const validIndices = (group.boardIds || []).filter(index => 
@@ -1105,15 +1176,98 @@ class VideoGroupManager {
           continue
         }
         
-        // Generate UIDs for this group
-        group.boardUids = this.getBoardUidsFromIndices(validIndices)
-        group.boardIds = validIndices
-        updatedCount++
+        // Sort and check adjacency
+        const sortedIndices = [...validIndices].sort((a, b) => a - b)
+        
+        if (!this.areBoardsAdjacent(sortedIndices)) {
+          // Check if new boards were inserted in between
+          const minIndex = Math.min(...sortedIndices)
+          const maxIndex = Math.max(...sortedIndices)
+          
+          const missingIndices = []
+          for (let i = minIndex; i <= maxIndex; i++) {
+            if (!sortedIndices.includes(i)) {
+              missingIndices.push(i)
+            }
+          }
+          
+          const validMissingIndices = missingIndices.filter(i => 
+            i >= 0 && i < this.boardData.boards.length && this.boardData.boards[i]
+          )
+          
+          if (validMissingIndices.length > 0 && validMissingIndices.length === missingIndices.length) {
+            // New boards were inserted - add them to the group
+            const allIndices = [...sortedIndices, ...validMissingIndices].sort((a, b) => a - b)
+            group.boardIds = allIndices
+            group.boardUids = this.getBoardUidsFromIndices(allIndices)
+            this.handleNewShotFlags(allIndices)
+            expandedCount++
+            updatedCount++
+          } else {
+            // Find largest contiguous segment
+            const contiguousSegments = this.findContiguousSegments(sortedIndices)
+            
+            if (contiguousSegments.length === 0 || contiguousSegments[0].length <= 1) {
+              this.groups.delete(group.id)
+              removedCount++
+              continue
+            }
+            
+            const largestSegment = contiguousSegments.reduce((largest, segment) => 
+              segment.length > largest.length ? segment : largest
+            , contiguousSegments[0])
+            
+            if (largestSegment.length <= 1) {
+              this.groups.delete(group.id)
+              removedCount++
+              continue
+            }
+            
+            group.boardIds = largestSegment
+            group.boardUids = this.getBoardUidsFromIndices(largestSegment)
+            updatedCount++
+          }
+        } else {
+          // Generate UIDs for this group
+          group.boardUids = this.getBoardUidsFromIndices(sortedIndices)
+          group.boardIds = sortedIndices
+          updatedCount++
+        }
       }
     }
     
     this.saveGroupsToStorage()
-    return { updated: updatedCount, removed: removedCount }
+    return { updated: updatedCount, removed: removedCount, expanded: expandedCount }
+  }
+  
+  // Find contiguous segments in an array of sorted indices
+  findContiguousSegments(sortedIndices) {
+    if (!sortedIndices || sortedIndices.length === 0) {
+      return []
+    }
+    
+    const segments = []
+    let currentSegment = [sortedIndices[0]]
+    
+    for (let i = 1; i < sortedIndices.length; i++) {
+      if (sortedIndices[i] === sortedIndices[i - 1] + 1) {
+        // Adjacent, add to current segment
+        currentSegment.push(sortedIndices[i])
+      } else {
+        // Gap found, start new segment
+        if (currentSegment.length > 0) {
+          segments.push(currentSegment)
+        }
+        currentSegment = [sortedIndices[i]]
+      }
+    }
+    
+    // Add the last segment
+    if (currentSegment.length > 0) {
+      segments.push(currentSegment)
+    }
+    
+    return segments
   }
 
 
@@ -1125,6 +1279,7 @@ class VideoGroupManager {
     
     let updatedCount = 0
     let removedCount = 0
+    let expandedCount = 0
     const groups = Array.from(this.groups.values())
     
     for (const group of groups) {
@@ -1139,9 +1294,80 @@ class VideoGroupManager {
           continue
         }
         
-        // Update the group with current indices and sort them
-        group.boardIds = currentIndices.sort((a, b) => a - b)
-        updatedCount++
+        // Sort the indices
+        const sortedIndices = [...currentIndices].sort((a, b) => a - b)
+        
+        // Check if boards are still adjacent
+        if (!this.areBoardsAdjacent(sortedIndices)) {
+          // Boards are no longer adjacent - check if new boards were inserted in between
+          const minIndex = Math.min(...sortedIndices)
+          const maxIndex = Math.max(...sortedIndices)
+          
+          // Find indices that are missing from the group
+          const missingIndices = []
+          for (let i = minIndex; i <= maxIndex; i++) {
+            if (!sortedIndices.includes(i)) {
+              missingIndices.push(i)
+            }
+          }
+          
+          // Check if all missing indices are valid board positions
+          const validMissingIndices = missingIndices.filter(i => 
+            i >= 0 && i < this.boardData.boards.length && this.boardData.boards[i]
+          )
+          
+          if (validMissingIndices.length > 0 && validMissingIndices.length === missingIndices.length) {
+            // New boards were inserted in between - add them to the group
+            const allIndices = [...sortedIndices, ...validMissingIndices].sort((a, b) => a - b)
+            const allUids = this.getBoardUidsFromIndices(allIndices)
+            
+            group.boardIds = allIndices
+            group.boardUids = allUids
+            
+            // Handle newShot flags for the newly added boards
+            this.handleNewShotFlags(allIndices)
+            
+            console.log(`[VideoGroupManager.forceUpdateAllGroups] Group ${group.id} expanded to include inserted boards: [${allIndices.join(', ')}]`)
+            expandedCount++
+            updatedCount++
+          } else {
+            // Boards were moved OUT of the group - keep the largest contiguous segment
+            const contiguousSegments = this.findContiguousSegments(sortedIndices)
+            
+            if (contiguousSegments.length === 0) {
+              this.groups.delete(group.id)
+              removedCount++
+              console.log(`[VideoGroupManager.forceUpdateAllGroups] Removed group ${group.id} - no contiguous segments`)
+              continue
+            }
+            
+            // Keep the largest contiguous segment
+            const largestSegment = contiguousSegments.reduce((largest, segment) => 
+              segment.length > largest.length ? segment : largest
+            , contiguousSegments[0])
+            
+            // If the largest segment has only 1 board, remove the group
+            if (largestSegment.length <= 1) {
+              this.groups.delete(group.id)
+              removedCount++
+              console.log(`[VideoGroupManager.forceUpdateAllGroups] Removed group ${group.id} - only 1 board remains`)
+              continue
+            }
+            
+            // Update group with the largest contiguous segment
+            const segmentUids = this.getBoardUidsFromIndices(largestSegment)
+            group.boardIds = largestSegment
+            group.boardUids = segmentUids
+            
+            console.log(`[VideoGroupManager.forceUpdateAllGroups] Group ${group.id} fragmented - kept segment [${largestSegment.join(', ')}]`)
+            updatedCount++
+          }
+        } else {
+          // Update the group with current indices
+          group.boardIds = sortedIndices
+          group.boardUids = this.getBoardUidsFromIndices(sortedIndices)
+          updatedCount++
+        }
       } else {
         // For groups without UIDs, validate indices
         const validIndices = (group.boardIds || []).filter(index => 
@@ -1154,16 +1380,61 @@ class VideoGroupManager {
           continue
         }
         
-        if (validIndices.length !== group.boardIds.length) {
-          group.boardIds = validIndices.sort((a, b) => a - b)
-          updatedCount++
-        } else {
-          // Ensure indices are sorted even if count is the same
-          const sortedIndices = validIndices.sort((a, b) => a - b)
-          if (JSON.stringify(sortedIndices) !== JSON.stringify(group.boardIds)) {
-            group.boardIds = sortedIndices
+        // Sort and check adjacency
+        const sortedIndices = [...validIndices].sort((a, b) => a - b)
+        
+        if (!this.areBoardsAdjacent(sortedIndices)) {
+          // Check if new boards were inserted in between
+          const minIndex = Math.min(...sortedIndices)
+          const maxIndex = Math.max(...sortedIndices)
+          
+          const missingIndices = []
+          for (let i = minIndex; i <= maxIndex; i++) {
+            if (!sortedIndices.includes(i)) {
+              missingIndices.push(i)
+            }
+          }
+          
+          const validMissingIndices = missingIndices.filter(i => 
+            i >= 0 && i < this.boardData.boards.length && this.boardData.boards[i]
+          )
+          
+          if (validMissingIndices.length > 0 && validMissingIndices.length === missingIndices.length) {
+            // New boards were inserted - add them to the group
+            const allIndices = [...sortedIndices, ...validMissingIndices].sort((a, b) => a - b)
+            group.boardIds = allIndices
+            group.boardUids = this.getBoardUidsFromIndices(allIndices)
+            this.handleNewShotFlags(allIndices)
+            expandedCount++
+            updatedCount++
+          } else {
+            // Find largest contiguous segment
+            const contiguousSegments = this.findContiguousSegments(sortedIndices)
+            
+            if (contiguousSegments.length === 0 || contiguousSegments[0].length <= 1) {
+              this.groups.delete(group.id)
+              removedCount++
+              continue
+            }
+            
+            const largestSegment = contiguousSegments.reduce((largest, segment) => 
+              segment.length > largest.length ? segment : largest
+            , contiguousSegments[0])
+            
+            if (largestSegment.length <= 1) {
+              this.groups.delete(group.id)
+              removedCount++
+              continue
+            }
+            
+            group.boardIds = largestSegment
+            group.boardUids = this.getBoardUidsFromIndices(largestSegment)
             updatedCount++
           }
+        } else {
+          group.boardIds = sortedIndices
+          group.boardUids = this.getBoardUidsFromIndices(sortedIndices)
+          updatedCount++
         }
       }
     }
@@ -1178,7 +1449,7 @@ class VideoGroupManager {
     const nameUpdates = this.updateGroupNamesFromShotNumbers()
     
     this.saveGroupsToStorage()
-    return { updated: updatedCount, removed: removedCount, nameUpdates: nameUpdates }
+    return { updated: updatedCount, removed: removedCount, expanded: expandedCount, nameUpdates: nameUpdates }
   }
 
 
@@ -1542,172 +1813,158 @@ class VideoGroupManager {
     return groups
   }
 
-  updateTimelineDisplay() {
-    // Performance optimization: Throttle timeline updates to prevent performance issues
+  updateTimelineDisplay(immediate = false) {
+    // Performance optimization: Use requestAnimationFrame for smooth updates
     if (this.timelineUpdateTimeout) {
       clearTimeout(this.timelineUpdateTimeout)
     }
+    
+    if (this.timelineUpdateRAF) {
+      cancelAnimationFrame(this.timelineUpdateRAF)
+    }
 
-    this.timelineUpdateTimeout = setTimeout(() => {
-      this.renderGroupIndicators()
-    }, 50) // Reduced timeout for more responsive updates
+    if (immediate) {
+      // Immediate update - use requestAnimationFrame for smooth rendering
+      this.timelineUpdateRAF = requestAnimationFrame(() => {
+        this.renderGroupIndicators()
+      })
+    } else {
+      // Debounced update for rapid changes (like scrolling)
+      this.timelineUpdateTimeout = setTimeout(() => {
+        this.timelineUpdateRAF = requestAnimationFrame(() => {
+          this.renderGroupIndicators()
+        })
+      }, 16) // ~1 frame at 60fps for smooth updates
+    }
+  }
+  
+  // Force immediate update without any debouncing
+  forceImmediateUpdate() {
+    if (this.timelineUpdateTimeout) {
+      clearTimeout(this.timelineUpdateTimeout)
+    }
+    if (this.timelineUpdateRAF) {
+      cancelAnimationFrame(this.timelineUpdateRAF)
+    }
+    this.renderGroupIndicators()
   }
 
   renderGroupIndicators() {
-    // Update timeline to show group indicators
+    // Update timeline to show group indicators using CSS classes and data attributes
+    // This approach survives DOM re-renders because it only sets attributes
     const timeline = document.querySelector('#timeline')
     if (!timeline) return
 
-    // Use requestAnimationFrame for smooth rendering
-    requestAnimationFrame(() => {
-      try {
-        // Get current groups
-        const currentGroups = Array.from(this.groups.values())
-        
-        // Create a map of current group indicators for efficient lookup
-        const existingIndicators = new Map()
-        const existingLinkSymbols = new Map()
-        
-        // Collect existing indicators without removing them yet
-        timeline.querySelectorAll('.group-indicator').forEach(indicator => {
-          const boardId = parseInt(indicator.dataset.boardId)
-          if (!isNaN(boardId)) {
-            existingIndicators.set(boardId, indicator)
-          }
+    // Skip if already rendering (prevents nested calls)
+    if (this._isRenderingIndicators) return
+    this._isRenderingIndicators = true
+
+    try {
+      // Inject CSS for group indicators if not already present
+      this._ensureIndicatorStyles()
+      
+      // Get current groups
+      const currentGroups = Array.from(this.groups.values())
+      
+      // Build a map of boardId -> group info
+      const boardGroupMap = new Map()
+      for (const group of currentGroups) {
+        group.boardIds.forEach((boardId) => {
+          boardGroupMap.set(boardId, { color: group.color, name: group.name, size: group.boardIds.length })
         })
-        
-        timeline.querySelectorAll('.group-link-symbol').forEach(symbol => {
-          const boardId = parseInt(symbol.dataset.boardId)
-          if (!isNaN(boardId)) {
-            existingLinkSymbols.set(boardId, symbol)
-          }
-        })
-
-        // Update or create group indicators for each group
-        for (const group of currentGroups) {
-          console.log(`[VideoGroupManager.renderGroupIndicators] Rendering group "${group.name}" with boardIds: [${group.boardIds.join(', ')}]`)
-          group.boardIds.forEach((boardId, index) => {
-            // Find thumbnail by position in timeline
-            const thumbnails = document.querySelectorAll('.thumbnail, .t-scene, [data-thumbnail]')
-            const thumbnail = thumbnails[boardId]
-            if (thumbnail) {
-              // Ensure thumbnail has relative positioning
-              if (thumbnail.style.position !== 'relative') {
-                thumbnail.style.position = 'relative'
-              }
-
-              // Update or create group color indicator
-              let indicator = existingIndicators.get(boardId)
-              if (indicator) {
-                // Update existing indicator smoothly
-                indicator.style.background = group.color
-                indicator.style.transition = 'background-color 0.1s ease'
-              } else {
-                // Create new indicator
-                indicator = document.createElement('div')
-                indicator.className = 'group-indicator'
-                indicator.dataset.boardId = boardId
-                indicator.style.cssText = `
-                  position: absolute;
-                  bottom: 0;
-                  left: 0;
-                  right: 0;
-                  height: 4px;
-                  background: ${group.color};
-                  border-radius: 0 0 4px 4px;
-                  z-index: 10;
-                  transition: background-color 0.1s ease;
-                `
-                thumbnail.appendChild(indicator)
-              }
-              
-              // Update or create link symbol for grouped items
-              if (group.boardIds.length > 1) {
-                let linkSymbol = existingLinkSymbols.get(boardId)
-                if (linkSymbol) {
-                  // Update existing symbol smoothly
-                  linkSymbol.style.background = group.color
-                  linkSymbol.style.transition = 'background-color 0.1s ease'
-                } else {
-                  // Create new symbol
-                  linkSymbol = document.createElement('div')
-                  linkSymbol.className = 'group-link-symbol'
-                  linkSymbol.dataset.boardId = boardId
-                  linkSymbol.style.cssText = `
-                    position: absolute;
-                    top: 4px;
-                    right: 4px;
-                    width: 16px;
-                    height: 16px;
-                    background: ${group.color};
-                    border-radius: 50%;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    color: white;
-                    font-size: 10px;
-                    font-weight: bold;
-                    z-index: 11;
-                    border: 2px solid white;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                    transition: background-color 0.1s ease;
-                  `
-                  linkSymbol.textContent = '🔗'
-                  linkSymbol.title = `Part of group: ${group.name}`
-                  thumbnail.appendChild(linkSymbol)
-                }
-              } else {
-                // Remove link symbol if group has only one board
-                const linkSymbol = existingLinkSymbols.get(boardId)
-                if (linkSymbol) {
-                  linkSymbol.style.transition = 'opacity 0.1s ease'
-                  linkSymbol.style.opacity = '0'
-                  setTimeout(() => {
-                    if (linkSymbol.parentNode) {
-                      linkSymbol.parentNode.removeChild(linkSymbol)
-                    }
-                  }, 100)
-                }
-              }
-            }
-          })
-        }
-
-        // Remove indicators for boards that are no longer in any group
-        const currentBoardIds = new Set()
-        currentGroups.forEach(group => {
-          group.boardIds.forEach(boardId => currentBoardIds.add(boardId))
-        })
-
-        // Fade out and remove indicators for boards not in any group
-        existingIndicators.forEach((indicator, boardId) => {
-          if (!currentBoardIds.has(boardId)) {
-            indicator.style.transition = 'opacity 0.1s ease'
-            indicator.style.opacity = '0'
-            setTimeout(() => {
-              if (indicator.parentNode) {
-                indicator.parentNode.removeChild(indicator)
-              }
-            }, 100)
-          }
-        })
-
-        existingLinkSymbols.forEach((symbol, boardId) => {
-          if (!currentBoardIds.has(boardId)) {
-            symbol.style.transition = 'opacity 0.1s ease'
-            symbol.style.opacity = '0'
-            setTimeout(() => {
-              if (symbol.parentNode) {
-                symbol.parentNode.removeChild(symbol)
-              }
-            }, 100)
-          }
-        })
-
-      } catch (error) {
-        console.error('[VideoGroupManager] Error in renderGroupIndicators:', error)
       }
-    })
+      
+      // Get all thumbnails
+      const thumbnails = document.querySelectorAll('.thumbnail, .t-scene, [data-thumbnail]')
+      
+      // Update thumbnails using data attributes and CSS variables
+      thumbnails.forEach((thumbnail, index) => {
+        const groupInfo = boardGroupMap.get(index)
+        
+        if (groupInfo) {
+          // This board is in a group - set data attributes and CSS variable for color
+          thumbnail.setAttribute('data-in-group', 'true')
+          thumbnail.style.setProperty('--group-color', groupInfo.color)
+          if (groupInfo.size > 1) {
+            thumbnail.setAttribute('data-group-linked', 'true')
+          } else {
+            thumbnail.removeAttribute('data-group-linked')
+          }
+        } else {
+          // This board is not in any group - remove attributes
+          thumbnail.removeAttribute('data-in-group')
+          thumbnail.removeAttribute('data-group-linked')
+          thumbnail.style.removeProperty('--group-color')
+        }
+      })
+
+    } catch (error) {
+      console.error('[VideoGroupManager] Error in renderGroupIndicators:', error)
+    } finally {
+      this._isRenderingIndicators = false
+    }
+  }
+
+  // Inject CSS styles for group indicators (uses pseudo-elements, no DOM creation needed)
+  _ensureIndicatorStyles() {
+    if (this._stylesInjected) return
+    
+    const styleId = 'video-group-indicator-styles'
+    if (document.getElementById(styleId)) {
+      this._stylesInjected = true
+      return
+    }
+    
+    const style = document.createElement('style')
+    style.id = styleId
+    style.textContent = `
+      /* Group indicator bar at bottom */
+      .thumbnail[data-in-group="true"],
+      .t-scene[data-in-group="true"],
+      [data-thumbnail][data-in-group="true"] {
+        position: relative !important;
+      }
+      
+      .thumbnail[data-in-group="true"]::after,
+      .t-scene[data-in-group="true"]::after,
+      [data-thumbnail][data-in-group="true"]::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: var(--group-color, #3b82f6);
+        border-radius: 0 0 4px 4px;
+        z-index: 10;
+        pointer-events: none;
+      }
+      
+      /* Link symbol for multi-board groups */
+      .thumbnail[data-group-linked="true"]::before,
+      .t-scene[data-group-linked="true"]::before,
+      [data-thumbnail][data-group-linked="true"]::before {
+        content: '🔗';
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        width: 16px;
+        height: 16px;
+        background: var(--group-color, #3b82f6);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 8px;
+        color: white;
+        z-index: 11;
+        border: 2px solid white;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        pointer-events: none;
+      }
+    `
+    document.head.appendChild(style)
+    this._stylesInjected = true
   }
 
   async exportGroupToPDF(groupId, pdfDoc, x, y, width, height) {
@@ -1973,6 +2230,7 @@ class VideoGroupManager {
     
     const maxBoardIndex = this.boardData.boards.length - 1
     const groupsToRemove = []
+    const groupsToFix = []
     
     for (const [groupId, group] of this.groups) {
       // Check if group has any invalid board indices
@@ -2003,6 +2261,66 @@ class VideoGroupManager {
         console.log(`[VideoGroupManager.cleanupInvalidGroups] Fixing group ${groupId} with duplicate indices`)
         group.boardIds = uniqueIndices.sort((a, b) => a - b)
       }
+      
+      // Check if group boards are still adjacent (safety net for fragmentation)
+      const sortedIndices = [...group.boardIds].sort((a, b) => a - b)
+      if (!this.areBoardsAdjacent(sortedIndices)) {
+        console.log(`[VideoGroupManager.cleanupInvalidGroups] Group ${groupId} has non-adjacent boards: [${sortedIndices.join(', ')}]`)
+        groupsToFix.push({ groupId, group, sortedIndices })
+      }
+    }
+    
+    // Fix fragmented groups - either by including inserted boards or keeping the largest segment
+    for (const { groupId, group, sortedIndices } of groupsToFix) {
+      // First, check if new boards were inserted in between
+      const minIndex = Math.min(...sortedIndices)
+      const maxIndex = Math.max(...sortedIndices)
+      
+      const missingIndices = []
+      for (let i = minIndex; i <= maxIndex; i++) {
+        if (!sortedIndices.includes(i)) {
+          missingIndices.push(i)
+        }
+      }
+      
+      // Check if all missing indices are valid board positions
+      const validMissingIndices = missingIndices.filter(i => 
+        i >= 0 && i < this.boardData.boards.length && this.boardData.boards[i]
+      )
+      
+      if (validMissingIndices.length > 0 && validMissingIndices.length === missingIndices.length) {
+        // New boards were inserted in between - add them to the group
+        const allIndices = [...sortedIndices, ...validMissingIndices].sort((a, b) => a - b)
+        group.boardIds = allIndices
+        group.boardUids = this.getBoardUidsFromIndices(allIndices)
+        this.handleNewShotFlags(allIndices)
+        console.log(`[VideoGroupManager.cleanupInvalidGroups] Expanded group ${groupId} to include inserted boards: [${allIndices.join(', ')}]`)
+        continue
+      }
+      
+      // Boards were moved out - keep the largest contiguous segment
+      const contiguousSegments = this.findContiguousSegments(sortedIndices)
+      
+      if (contiguousSegments.length === 0) {
+        groupsToRemove.push(groupId)
+        console.log(`[VideoGroupManager.cleanupInvalidGroups] Removing fragmented group ${groupId} - no contiguous segments`)
+        continue
+      }
+      
+      const largestSegment = contiguousSegments.reduce((largest, segment) => 
+        segment.length > largest.length ? segment : largest
+      , contiguousSegments[0])
+      
+      if (largestSegment.length <= 1) {
+        groupsToRemove.push(groupId)
+        console.log(`[VideoGroupManager.cleanupInvalidGroups] Removing fragmented group ${groupId} - only 1 board remains`)
+        continue
+      }
+      
+      // Update group with the largest contiguous segment
+      group.boardIds = largestSegment
+      group.boardUids = this.getBoardUidsFromIndices(largestSegment)
+      console.log(`[VideoGroupManager.cleanupInvalidGroups] Fixed fragmented group ${groupId} - kept segment [${largestSegment.join(', ')}]`)
     }
     
     // Remove invalid groups
@@ -2265,7 +2583,15 @@ class VideoGroupManager {
       if (state.currentColorIndex !== undefined) {
         this.currentColorIndex = state.currentColorIndex
       }
-      this.saveGroupsToStorage()
+      
+      // CRITICAL: After restoring state, validate and fix group indices
+      // The restored boardIds might not match the actual board positions
+      // if the board data was restored from a different undo state
+      console.log('[VideoGroupManager.restoreFromState] Validating groups after restore')
+      this.forceUpdateAllGroups()
+      
+      // Sync the grouped board indices
+      this.syncGroupedBoardIndices()
     }
   }
 }

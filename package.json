@@ -49,7 +49,7 @@
   "build": {
     "afterSign": "scripts/notarize.js",
     "asar": true,
-    "appId": "com.wonderunit.storyboarder",
+    "appId": "com.wonderunit.storyboarder.dev",
     "buildDependenciesFromSource": true,
     "compression": "maximum",
     "files": [
@@ -128,7 +128,10 @@
       "perMachine": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "license": "build/license_en.txt"
+      "license": "build/license_en.txt",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico"
     },
     "appImage": {
       "license": "build/license_en.txt"

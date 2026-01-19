@@ -520,11 +520,10 @@ class EnhancedGifGroupManager {
       this.syncWithMainSelections()
     }, 1500) // Sync every 1.5 seconds for even better performance
 
-    // Listen for board selection changes to fix glitches
+    // Listen for board selection changes to update group highlight
     const selectionHandler = () => {
       try {
         this.onBoardSelectionChanged()
-        this.highlightSelectedBoardGroup()
       } catch (e) {
         // ignore to avoid breaking project load
       }
@@ -649,6 +648,11 @@ class EnhancedGifGroupManager {
         this.updateGroupsList()
         this.updateTimelineDisplay()
 
+        // Trigger main UI refresh to show the gap indicator
+        if (typeof window !== 'undefined' && window.renderThumbnailDrawer) {
+          window.renderThumbnailDrawer()
+        }
+
         // Show success message
         const action = existingGroups.length > 0 ? 'updated' : 'created'
         this.showNotification(`Video group "${group.name}" ${action} successfully!`, 'success')
@@ -727,9 +731,12 @@ class EnhancedGifGroupManager {
     if (this.timelineUpdateTimeout) {
       clearTimeout(this.timelineUpdateTimeout)
     }
+    if (this.timelineUpdateRAF) {
+      cancelAnimationFrame(this.timelineUpdateRAF)
+    }
 
-    // Force immediate update
-    this.updateTimelineDisplay()
+    // Force immediate update without debouncing
+    this.forceImmediateUpdate()
   }
 
   // Show group dividers during drag
@@ -797,10 +804,14 @@ class EnhancedGifGroupManager {
   }
 
   // Batch UI updates to prevent flickering and improve performance
-  batchUIUpdates(updateFunction) {
+  batchUIUpdates(updateFunction, immediate = false) {
     // Clear any pending updates
     if (this.batchUpdateTimeout) {
       clearTimeout(this.batchUpdateTimeout)
+    }
+    
+    if (this.batchUpdateRAF) {
+      cancelAnimationFrame(this.batchUpdateRAF)
     }
 
     // Add to batch queue
@@ -809,25 +820,31 @@ class EnhancedGifGroupManager {
     }
     this.pendingUIUpdates.push(updateFunction)
 
-    // Process batch after a much longer delay to prevent blinking during rapid operations
-    this.batchUpdateTimeout = setTimeout(() => {
+    const executeBatch = () => {
       if (this.pendingUIUpdates && this.pendingUIUpdates.length > 0) {
-        // Use requestAnimationFrame for smooth rendering
-        requestAnimationFrame(() => {
-          // Execute all pending updates
-          this.pendingUIUpdates.forEach(update => {
-            try {
-              update()
-            } catch (error) {
-              console.error('[EnhancedGifGroupManager] Error in batched UI update:', error)
-            }
-          })
-          
-          // Clear the batch
-          this.pendingUIUpdates = []
+        // Execute all pending updates
+        const updates = this.pendingUIUpdates
+        this.pendingUIUpdates = []
+        
+        updates.forEach(update => {
+          try {
+            update()
+          } catch (error) {
+            console.error('[EnhancedGifGroupManager] Error in batched UI update:', error)
+          }
         })
       }
-    }, 300) // Much longer delay to prevent blinking during rapid operations
+    }
+
+    if (immediate) {
+      // Execute immediately on next animation frame
+      this.batchUpdateRAF = requestAnimationFrame(executeBatch)
+    } else {
+      // Short delay to batch rapid updates, then use requestAnimationFrame
+      this.batchUpdateTimeout = setTimeout(() => {
+        this.batchUpdateRAF = requestAnimationFrame(executeBatch)
+      }, 16) // ~1 frame at 60fps
+    }
   }
 
   // Ensure UI updates happen in the correct order
@@ -879,8 +896,9 @@ class EnhancedGifGroupManager {
 
   // Handle board movement/selection changes
   onBoardSelectionChanged() {
-    // Force refresh to prevent glitches
-    this.forceRefreshTimeline()
+    // Only update the highlight on the group list, don't re-render indicators
+    // Indicators only need to be re-rendered when groups actually change
+    this.highlightSelectedBoardGroup()
   }
 
   async showGroupNameDialog() {
@@ -1341,16 +1359,41 @@ class EnhancedGifGroupManager {
     }
   }
 
-  updateTimelineDisplay() {
-    // Performance optimization: Throttle timeline updates to prevent performance issues
+  updateTimelineDisplay(immediate = false) {
+    // Performance optimization: Use requestAnimationFrame for smooth updates
     if (this.timelineUpdateTimeout) {
       clearTimeout(this.timelineUpdateTimeout)
     }
+    
+    if (this.timelineUpdateRAF) {
+      cancelAnimationFrame(this.timelineUpdateRAF)
+    }
 
-    // Use a much longer debounce to prevent blinking during rapid operations
-    this.timelineUpdateTimeout = setTimeout(() => {
-      this.renderTimelineDisplay()
-    }, 200) // Much longer timeout to prevent blinking
+    if (immediate) {
+      // Immediate update - use requestAnimationFrame for smooth rendering
+      this.timelineUpdateRAF = requestAnimationFrame(() => {
+        this.renderTimelineDisplay()
+      })
+    } else {
+      // Very short debounce for rapid changes - just enough to batch same-frame updates
+      this.timelineUpdateTimeout = setTimeout(() => {
+        this.timelineUpdateRAF = requestAnimationFrame(() => {
+          this.renderTimelineDisplay()
+        })
+      }, 16) // ~1 frame at 60fps
+    }
+  }
+  
+  // Force immediate update without any debouncing
+  forceImmediateUpdate() {
+    if (this.timelineUpdateTimeout) {
+      clearTimeout(this.timelineUpdateTimeout)
+    }
+    if (this.timelineUpdateRAF) {
+      cancelAnimationFrame(this.timelineUpdateRAF)
+    }
+    this.renderTimelineDisplay()
+    this.videoGroupManager.forceImmediateUpdate()
   }
 
   renderTimelineDisplay() {
@@ -1361,120 +1404,51 @@ class EnhancedGifGroupManager {
 
     this.isUpdatingUI = true
 
-    // Use requestAnimationFrame for smooth rendering
-    requestAnimationFrame(() => {
-      try {
-        // Use the video group manager's timeline display
-        this.videoGroupManager.renderGroupIndicators()
+    try {
+      // Use the video group manager's timeline display (handles all indicator rendering)
+      this.videoGroupManager.renderGroupIndicators()
 
-        // Get both thumbnail types - the timeline uses different selectors
-        const thumbnails = document.querySelectorAll('.thumbnail, .t-scene, [data-thumbnail]')
-
-        // Create maps for existing indicators to avoid blinking
-        const existingIndicators = new Map()
-        thumbnails.forEach((thumbnail, index) => {
-          const indicator = thumbnail.querySelector('.gif-group-indicator')
-          if (indicator) {
-            existingIndicators.set(index, indicator)
+      // Get current video groups and update CSS classes only
+      const videoGroups = this.videoGroupManager.getAllGroups()
+      const currentGroupedBoards = new Set()
+      
+      videoGroups.forEach(group => {
+        group.boardIds.forEach(boardIndex => {
+          currentGroupedBoards.add(boardIndex)
+          const thumbnail = this.getThumbnailByIndex(boardIndex)
+          if (thumbnail && !thumbnail.classList.contains('gif-grouped')) {
+            thumbnail.classList.add('gif-grouped')
           }
         })
+      })
 
-        // Get current video groups
-        const videoGroups = this.videoGroupManager.getAllGroups()
-        const currentGroupedBoards = new Set()
-        
-        // Update or create group indicators for video groups
-        videoGroups.forEach(group => {
-          group.boardIds.forEach(boardIndex => {
-            currentGroupedBoards.add(boardIndex)
-            const thumbnail = this.getThumbnailByIndex(boardIndex)
-            if (thumbnail) {
-              thumbnail.classList.add('gif-grouped')
-              
-              // Update or create group indicator
-              let indicator = existingIndicators.get(boardIndex)
-              if (indicator) {
-                // Update existing indicator smoothly
-                indicator.style.background = group.color
-                indicator.style.transition = 'background-color 0.1s ease'
-                indicator.title = `Part of group: ${group.name}`
-              } else {
-                // Create new indicator
-                indicator = document.createElement('div')
-                indicator.className = 'gif-group-indicator'
-                indicator.style.cssText = `
-                  position: absolute;
-                  top: 5px;
-                  right: 5px;
-                  width: 20px;
-                  height: 20px;
-                  border-radius: 50%;
-                  background: ${group.color};
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  font-size: 10px;
-                  color: white;
-                  z-index: 10;
-                  border: 2px solid white;
-                  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                  cursor: pointer;
-                  transition: background-color 0.1s ease;
-                `
-                indicator.innerHTML = '🔗'
-                indicator.title = `Part of group: ${group.name}`
-                
-                // Add click handler to select group
-                indicator.addEventListener('click', (e) => {
-                  e.stopPropagation()
-                  this.selectGroup(group.id)
-                })
-                
-                thumbnail.appendChild(indicator)
-              }
-            }
-          })
-        })
-
-        // Fade out and remove indicators for boards no longer in groups
-        existingIndicators.forEach((indicator, boardIndex) => {
-          if (!currentGroupedBoards.has(boardIndex)) {
-            const thumbnail = this.getThumbnailByIndex(boardIndex)
-            if (thumbnail) {
-              thumbnail.classList.remove('gif-grouped')
-            }
-            indicator.style.transition = 'opacity 0.1s ease'
-            indicator.style.opacity = '0'
-            setTimeout(() => {
-              if (indicator.parentNode) {
-                indicator.parentNode.removeChild(indicator)
-              }
-            }, 100)
-          }
-        })
-
-        // Sync with main window selections (for group indicators only)
-        this.syncWithMainSelections()
-
-        // Add click handlers for board selection in grouping mode
-        // Note: We don't need to manage selection classes since main window handles them
-        if (this.isGroupingMode) {
-          thumbnails.forEach((thumbnail, index) => {
-            this.handleThumbnailClick = (e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              this.toggleBoardSelection(index)
-            }
-            thumbnail.addEventListener('click', this.handleThumbnailClick)
-          })
+      // Remove gif-grouped class from boards no longer in groups
+      const thumbnails = document.querySelectorAll('.thumbnail, .t-scene, [data-thumbnail]')
+      thumbnails.forEach((thumbnail, index) => {
+        if (!currentGroupedBoards.has(index) && thumbnail.classList.contains('gif-grouped')) {
+          thumbnail.classList.remove('gif-grouped')
         }
-      } catch (error) {
-        console.error('[EnhancedGifGroupManager] Error in renderTimelineDisplay:', error)
-      } finally {
-        // Always reset the flag
-        this.isUpdatingUI = false
+      })
+
+      // Sync with main window selections (for group indicators only)
+      this.syncWithMainSelections()
+
+      // Add click handlers for board selection in grouping mode
+      if (this.isGroupingMode) {
+        thumbnails.forEach((thumbnail, index) => {
+          this.handleThumbnailClick = (e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            this.toggleBoardSelection(index)
+          }
+          thumbnail.addEventListener('click', this.handleThumbnailClick)
+        })
       }
-    })
+    } catch (error) {
+      console.error('[EnhancedGifGroupManager] Error in renderTimelineDisplay:', error)
+    } finally {
+      this.isUpdatingUI = false
+    }
   }
 
   syncWithMainSelections() {
@@ -1512,8 +1486,8 @@ class EnhancedGifGroupManager {
       // Update display only when selections actually change
       this.updateSelectionDisplay()
       
-      // Force timeline refresh to prevent glitches
-      this.forceRefreshTimeline()
+      // Update group highlight without re-rendering indicators
+      this.highlightSelectedBoardGroup()
     }
   }
 
@@ -1640,6 +1614,8 @@ class EnhancedGifGroupManager {
       modal.querySelector('#confirm-rename').onclick = () => {
         const newName = input.value.trim()
         if (newName && newName !== group.name) {
+          // Store undo state before rename
+          this.storeUndoState()
           this.videoGroupManager.renameGroup(group.id, newName)
           this.updateGroupsList()
           this.showNotification(`Group renamed to "${newName}"`, 'success')
@@ -1652,6 +1628,8 @@ class EnhancedGifGroupManager {
         if (e.key === 'Enter') {
           const newName = input.value.trim()
           if (newName && newName !== group.name) {
+            // Store undo state before rename
+            this.storeUndoState()
             this.videoGroupManager.renameGroup(group.id, newName)
             this.updateGroupsList()
             this.showNotification(`Group renamed to "${newName}"`, 'success')
@@ -3030,6 +3008,9 @@ class EnhancedGifGroupManager {
     content.querySelector('#cancel-color').addEventListener('click', cleanup)
     content.querySelector('#apply-color').addEventListener('click', () => {
       if (selectedColor !== group.color) {
+        // Store undo state before color change
+        this.storeUndoState()
+        
         this.videoGroupManager.updateGroup(groupId, { color: selectedColor })
         this.updateGroupsList()
         this.updateTimelineDisplay()
@@ -3057,6 +3038,24 @@ class EnhancedGifGroupManager {
     this.videoGroupManager.saveGroupsToStorage()
     
     this.updateGroupsList()
+  }
+
+  toggleAdvancedMode(groupId) {
+    const group = this.videoGroupManager.groups.get(groupId)
+    if (!group) return
+
+    // Store undo state before operation
+    this.storeUndoState()
+    
+    // Toggle advanced timing mode
+    group.advancedMode = !group.advancedMode
+    this.videoGroupManager.saveGroupsToStorage()
+    
+    if (group.advancedMode) {
+      this.showAdvancedTimingDialog(groupId)
+    } else {
+      this.updateGroupsList()
+    }
   }
 
   // Preview timing updates without saving or re-rendering
@@ -3087,24 +3086,6 @@ class EnhancedGifGroupManager {
     this.videoGroupManager.saveGroupsToStorage()
     
     this.updateGroupsList()
-  }
-
-  toggleAdvancedMode(groupId) {
-    const group = this.videoGroupManager.groups.get(groupId)
-    if (!group) return
-
-    // Store undo state before operation
-    this.storeUndoState()
-
-    // Toggle advanced mode
-    group.advancedMode = !group.advancedMode
-    this.videoGroupManager.saveGroupsToStorage()
-    
-    if (group.advancedMode) {
-      this.showAdvancedTimingDialog(groupId)
-    } else {
-      this.updateGroupsList()
-    }
   }
 
   resetToMainSlider(groupId) {
